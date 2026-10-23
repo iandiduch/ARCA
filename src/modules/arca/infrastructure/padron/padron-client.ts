@@ -1,0 +1,166 @@
+import { XMLParser } from 'fast-xml-parser';
+import { FiscalError, InfrastructureError } from '../../../../core/errors/app-error.js';
+import { logger } from '../../../../app/logger.js';
+import type { WsfeAuth, WsfeClientOptions } from '../wsfev1/wsfev1-client.js';
+
+export interface PadronPersonaResult {
+  cuit: string;
+  businessName: string;
+  personType: 'FISICA' | 'JURIDICA';
+  status: string;
+  fiscalCondition: 'IVA_RESPONSABLE_INSCRIPTO' | 'RESPONSABLE_MONOTRIBUTO' | 'IVA_EXENTO' | 'CONSUMIDOR_FINAL';
+  fiscalConditionCode: number;
+  fiscalConditionName: string;
+  address?: {
+    street?: string | undefined;
+    city?: string | undefined;
+    province?: string | undefined;
+    postalCode?: string | undefined;
+  } | undefined;
+  queriedAt: Date;
+}
+
+export class PadronClient {
+  private static readonly ENDPOINTS = {
+    homologation: 'https://awshomo.afip.gob.ar/sr-padron/webservices/personaServiceA5',
+    production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5'
+  };
+
+  /**
+   * Consulta los datos fiscales de un CUIT ante el Padrón A5 de ARCA
+   */
+  public static async getPersona(
+    auth: WsfeAuth,
+    targetCuit: string,
+    options?: WsfeClientOptions
+  ): Promise<PadronPersonaResult> {
+    const environment = options?.environment ?? 'homologation';
+    const endpoint = this.ENDPOINTS[environment];
+
+    const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:a5="http://a5.soap.ws.server.puc.sr/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <a5:getPersona>
+      <token>${auth.token}</token>
+      <sign>${auth.sign}</sign>
+      <cuitRepresentada>${auth.cuit}</cuitRepresentada>
+      <idPersona>${targetCuit}</idPersona>
+    </a5:getPersona>
+  </soapenv:Body>
+</soapenv:Envelope>`.trim();
+
+    try {
+      const xmlResponse = await this.executeSoap(
+        endpoint,
+        'http://a5.soap.ws.server.puc.sr/getPersona',
+        soapBody,
+        options?.timeoutMs ?? 15000
+      );
+
+      const parser = new XMLParser({
+        isArray: (name) => name === 'impuesto' || name === 'errorConstancia'
+      });
+      const parsed = parser.parse(xmlResponse);
+
+      const personaReturn =
+        parsed['soapenv:Envelope']?.['soapenv:Body']?.['getPersonaResponse']?.['personaReturn'] ||
+        parsed['Envelope']?.['Body']?.['getPersonaResponse']?.['personaReturn'];
+
+      if (!personaReturn) {
+        throw new InfrastructureError('Respuesta inesperada al consultar Padrón A5 de ARCA');
+      }
+
+      if (personaReturn.errorConstancia?.length) {
+        const msg = personaReturn.errorConstancia.join(', ');
+        throw new FiscalError(`Error de Padrón ARCA: ${msg}`);
+      }
+
+      const dg = personaReturn.datosGenerales || {};
+      const razonSocial =
+        dg.razonSocial ||
+        [dg.apellido, dg.nombre].filter(Boolean).join(' ') ||
+        `Contribuyente ${targetCuit}`;
+
+      const tipoPersona = dg.tipoPersona === 'JURIDICA' ? 'JURIDICA' : 'FISICA';
+      const estadoClave = dg.estadoClave || 'ACTIVO';
+
+      // Deducir condición de IVA a partir de los impuestos registrados
+      const impuestos = [
+        ...(personaReturn.datosRegimenGeneral?.impuesto ?? []),
+        ...(personaReturn.datosMonotributo?.impuesto ?? [])
+      ];
+
+      let fiscalCondition: PadronPersonaResult['fiscalCondition'] = 'CONSUMIDOR_FINAL';
+      let fiscalConditionCode = 5;
+      let fiscalConditionName = 'Consumidor Final';
+
+      const hasIva = impuestos.some((i: { idImpuesto?: number }) => Number(i.idImpuesto) === 30);
+      const hasMonotributo = impuestos.some((i: { idImpuesto?: number }) => Number(i.idImpuesto) === 32);
+      const hasExento = impuestos.some((i: { idImpuesto?: number }) => Number(i.idImpuesto) === 33);
+
+      if (hasIva) {
+        fiscalCondition = 'IVA_RESPONSABLE_INSCRIPTO';
+        fiscalConditionCode = 1;
+        fiscalConditionName = 'IVA Responsable Inscripto';
+      } else if (hasMonotributo) {
+        fiscalCondition = 'RESPONSABLE_MONOTRIBUTO';
+        fiscalConditionCode = 6;
+        fiscalConditionName = 'Responsable Monotributo';
+      } else if (hasExento) {
+        fiscalCondition = 'IVA_EXENTO';
+        fiscalConditionCode = 4;
+        fiscalConditionName = 'IVA Sujeto Exento';
+      }
+
+      const dom = dg.domicilioFiscal || {};
+
+      return {
+        cuit: targetCuit,
+        businessName: String(razonSocial).trim(),
+        personType: tipoPersona,
+        status: estadoClave,
+        fiscalCondition,
+        fiscalConditionCode,
+        fiscalConditionName,
+        address: {
+          street: dom.direccion ? String(dom.direccion) : undefined,
+          city: dom.localidad ? String(dom.localidad) : undefined,
+          province: dom.descripcionProvincia ? String(dom.descripcionProvincia) : undefined,
+          postalCode: dom.codPostal ? String(dom.codPostal) : undefined
+        },
+        queriedAt: new Date()
+      };
+    } catch (err) {
+      logger.warn({ err, targetCuit }, 'Aviso en consulta de Padrón ARCA A5');
+      throw err;
+    }
+  }
+
+  private static async executeSoap(url: string, soapAction: string, body: string, timeoutMs: number): Promise<string> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          SOAPAction: soapAction
+        },
+        body,
+        signal: controller.signal
+      });
+
+      const responseText = await res.text();
+      return responseText;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new InfrastructureError(`Timeout al conectar con Padrón ARCA (${timeoutMs}ms)`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
