@@ -9,3 +9,9 @@ export * from './fiscal-identities.js';
 export * from './fiscal-certificates.js';
 export * from './points-of-sale.js';
 export * from './wsaa-access-tickets.js';
+export * from './invoices.js';
+export * from './invoice-items.js';
+export * from './invoice-vat-subtotals.js';
+export * from './invoice-associated-vouchers.js';
+export * from './idempotency-keys.js';
+

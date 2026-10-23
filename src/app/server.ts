@@ -11,6 +11,7 @@ import { auditRoutes } from '../modules/audit/presentation/audit-routes.js';
 import { customerRoutes } from '../modules/customers/presentation/customer-routes.js';
 import { productRoutes } from '../modules/products/presentation/product-routes.js';
 import { fiscalIdentityRoutes } from '../modules/fiscal-identities/presentation/fiscal-identity-routes.js';
+import { invoiceRoutes } from '../modules/invoices/presentation/invoice-routes.js';
 import { logger } from './logger.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
@@ -105,6 +106,9 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
 
   // Rutas de Integración ARCA e Identidades Fiscales
   await app.register(fiscalIdentityRoutes);
+
+  // Rutas de Facturación Electrónica (Fase 5)
+  await app.register(invoiceRoutes);
 
   // Ruta raíz informativa
   app.get('/', async (_req, reply) => {

@@ -43,3 +43,66 @@ export const UNIT_MEASURES: Record<string, { code: number; name: string }> = {
   LITRO: { code: 3, name: 'Litro' },
   OTRO: { code: 98, name: 'Otras unidades' }
 };
+
+export const VOUCHER_TYPES = {
+  FACTURA_A: 1,
+  NOTA_DE_DEBITO_A: 2,
+  NOTA_DE_CREDITO_A: 3,
+  FACTURA_B: 6,
+  NOTA_DE_DEBITO_B: 7,
+  NOTA_DE_CREDITO_B: 8,
+  FACTURA_C: 11,
+  NOTA_DE_DEBITO_C: 12,
+  NOTA_DE_CREDITO_C: 13,
+  FACTURA_M: 51,
+  NOTA_DE_DEBITO_M: 52,
+  NOTA_DE_CREDITO_M: 53
+} as const;
+
+export const DOC_TYPES = {
+  CUIT: 80,
+  CUIL: 86,
+  CDI: 87,
+  DNI: 96,
+  CONSUMIDOR_FINAL: 99
+} as const;
+
+export function getVoucherLetter(voucherType: number): 'A' | 'B' | 'C' | 'M' {
+  switch (voucherType) {
+    case 1:
+    case 2:
+    case 3:
+      return 'A';
+    case 6:
+    case 7:
+    case 8:
+      return 'B';
+    case 11:
+    case 12:
+    case 13:
+      return 'C';
+    case 51:
+    case 52:
+    case 53:
+      return 'M';
+    default:
+      return 'B';
+  }
+}
+
+export function isCreditNote(voucherType: number): boolean {
+  return [3, 8, 13, 53].includes(voucherType);
+}
+
+export function isDebitNote(voucherType: number): boolean {
+  return [2, 7, 12, 52].includes(voucherType);
+}
+
+export function isInvoice(voucherType: number): boolean {
+  return [1, 6, 11, 51].includes(voucherType);
+}
+
+export function requiresVatBreakdown(voucherType: number): boolean {
+  const letter = getVoucherLetter(voucherType);
+  return letter !== 'C'; // Monotributo (C) no discrimina IVA en WSFEv1
+}
