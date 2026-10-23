@@ -10,6 +10,7 @@ import { tenantRoutes } from '../modules/tenants/presentation/tenant-routes.js';
 import { auditRoutes } from '../modules/audit/presentation/audit-routes.js';
 import { customerRoutes } from '../modules/customers/presentation/customer-routes.js';
 import { productRoutes } from '../modules/products/presentation/product-routes.js';
+import { fiscalIdentityRoutes } from '../modules/fiscal-identities/presentation/fiscal-identity-routes.js';
 import { logger } from './logger.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
@@ -101,6 +102,9 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   // Rutas de Catálogos Comerciales (Clientes y Productos)
   await app.register(customerRoutes);
   await app.register(productRoutes);
+
+  // Rutas de Integración ARCA e Identidades Fiscales
+  await app.register(fiscalIdentityRoutes);
 
   // Ruta raíz informativa
   app.get('/', async (_req, reply) => {

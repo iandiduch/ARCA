@@ -5,3 +5,7 @@ export * from './api-keys.js';
 export * from './audit-logs.js';
 export * from './customers.js';
 export * from './products.js';
+export * from './fiscal-identities.js';
+export * from './fiscal-certificates.js';
+export * from './points-of-sale.js';
+export * from './wsaa-access-tickets.js';
