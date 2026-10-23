@@ -9,6 +9,7 @@ export const apiKeys = pgTable('api_keys', {
   name: text('name').notNull(),
   prefix: text('prefix').notNull(),
   keyHash: text('key_hash').notNull().unique(),
+  role: text('role').default('pos_client').notNull(), // 'admin' | 'pos_client' | 'read_only'
   active: boolean('active').default(true).notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

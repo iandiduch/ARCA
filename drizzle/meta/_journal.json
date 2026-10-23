@@ -8,6 +8,13 @@
       "when": 1792780166824,
       "tag": "0000_optimal_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792786135422,
+      "tag": "0001_lonely_madrox",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,8 @@ import swaggerUi from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { errorHandler } from '../core/errors/error-handler.js';
 import { healthRoutes } from './routes/health.js';
+import { tenantRoutes } from '../modules/tenants/presentation/tenant-routes.js';
+import { auditRoutes } from '../modules/audit/presentation/audit-routes.js';
 import { logger } from './logger.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
@@ -69,6 +71,8 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
       },
       tags: [
         { name: 'Health', description: 'Monitoreo de estado y dependencias' },
+        { name: 'Tenants', description: 'Gestión de comercios y API Keys multi-tenant' },
+        { name: 'Audit', description: 'Pistas y registros de auditoría' },
         { name: 'Invoices', description: 'Emisión y consulta de facturas y notas' },
         { name: 'Fiscal Identities', description: 'Vinculación de comercios con ARCA' },
         { name: 'Taxpayer Registry', description: 'Consulta al padrón oficial de ARCA' },
@@ -87,6 +91,10 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
 
   // Rutas base
   await app.register(healthRoutes);
+
+  // Rutas de Multi-tenancy y Auditoría
+  await app.register(tenantRoutes);
+  await app.register(auditRoutes);
 
   // Ruta raíz informativa
   app.get('/', async (_req, reply) => {
