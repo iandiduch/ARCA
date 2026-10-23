@@ -8,6 +8,8 @@ import { errorHandler } from '../core/errors/error-handler.js';
 import { healthRoutes } from './routes/health.js';
 import { tenantRoutes } from '../modules/tenants/presentation/tenant-routes.js';
 import { auditRoutes } from '../modules/audit/presentation/audit-routes.js';
+import { customerRoutes } from '../modules/customers/presentation/customer-routes.js';
+import { productRoutes } from '../modules/products/presentation/product-routes.js';
 import { logger } from './logger.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
@@ -95,6 +97,10 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   // Rutas de Multi-tenancy y Auditoría
   await app.register(tenantRoutes);
   await app.register(auditRoutes);
+
+  // Rutas de Catálogos Comerciales (Clientes y Productos)
+  await app.register(customerRoutes);
+  await app.register(productRoutes);
 
   // Ruta raíz informativa
   app.get('/', async (_req, reply) => {

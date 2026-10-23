@@ -3,3 +3,5 @@ export * from './users.js';
 export * from './tenant-memberships.js';
 export * from './api-keys.js';
 export * from './audit-logs.js';
+export * from './customers.js';
+export * from './products.js';

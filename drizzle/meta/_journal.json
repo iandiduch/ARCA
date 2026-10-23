@@ -15,6 +15,13 @@
       "when": 1792786135422,
       "tag": "0001_lonely_madrox",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792786662026,
+      "tag": "0002_purple_excalibur",
+      "breakpoints": true
     }
   ]
 }
