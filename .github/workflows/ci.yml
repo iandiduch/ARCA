@@ -1,0 +1,34 @@
+name: CI - Fundamentos ARCA API
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  test-and-build:
+    name: Build & Test (TypeScript Strict + Vitest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Type Check & Build
+        run: npm run build
+
+      - name: Run Test Suite
+        run: npm test
+
+      - name: Verify Migrations Consistency
+        run: npx tsx ./node_modules/drizzle-kit/bin.cjs generate

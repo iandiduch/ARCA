@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.env
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.pem
+*.key
+*.crt
+*.csr
+!certs/sample*
