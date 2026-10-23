@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
@@ -21,6 +22,7 @@ import { getContainer, type ServiceContainer } from './container.js';
 export interface CreateAppOptions {
   container?: ServiceContainer;
   enableLogging?: boolean;
+  rateLimitMax?: number;
 }
 
 export async function createApp(options?: CreateAppOptions): Promise<FastifyInstance> {
@@ -49,6 +51,25 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  });
+
+  // Limitador de peticiones por inquilino / IP
+  await app.register(rateLimit, {
+    max: options?.rateLimitMax ?? (config.NODE_ENV === 'test' ? 10000 : config.RATE_LIMIT_MAX),
+    timeWindow: config.RATE_LIMIT_WINDOW_MS,
+    keyGenerator: (request) => {
+      const apiKey = request.headers['x-api-key'];
+      if (typeof apiKey === 'string' && apiKey.length > 0) {
+        return apiKey;
+      }
+      return request.ip;
+    },
+    errorResponseBuilder: (_request, context) => ({
+      statusCode: 429,
+      code: 'RATE_LIMIT_EXCEEDED',
+      error: 'Too Many Requests',
+      message: `Has superado el límite de ${context.max} peticiones por ventana de tiempo. Por favor, reintenta en ${Math.ceil(context.ttl / 1000)} segundos.`
+    })
   });
 
   // Documentación OpenAPI / Swagger

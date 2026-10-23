@@ -56,6 +56,17 @@ export async function checkDatabaseConnection(): Promise<{
   }
 }
 
+export function getDatabasePoolStats(): { total: number; idle: number; waiting: number } {
+  if (!pool) {
+    return { total: 0, idle: 0, waiting: 0 };
+  }
+  return {
+    total: pool.totalCount,
+    idle: pool.idleCount,
+    waiting: pool.waitingCount
+  };
+}
+
 export async function closeDatabaseConnection(): Promise<void> {
   if (pool) {
     await pool.end();

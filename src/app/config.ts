@@ -11,7 +11,9 @@ const envSchema = z.object({
   API_KEY_MASTER: z.string().min(16).default('dev-master-secret-key-change-in-production'),
   ENCRYPTION_KEY: z.string().length(64).default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
   ARCA_DEFAULT_ENVIRONMENT: z.enum(['homologation', 'production']).default('homologation'),
-  ARCA_PLATFORM_CUIT: z.string().regex(/^\d{11}$/).default('20000000001')
+  ARCA_PLATFORM_CUIT: z.string().regex(/^\d{11}$/).default('20000000001'),
+  RATE_LIMIT_MAX: z.coerce.number().default(300),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000)
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

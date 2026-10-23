@@ -1,6 +1,7 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
-import { checkDatabaseConnection } from '../../infrastructure/database/connection.js';
+import { checkDatabaseConnection, getDatabasePoolStats } from '../../infrastructure/database/connection.js';
+import { TaxpayerService } from '../../modules/taxpayers/application/taxpayer-service.js';
 
 export const healthRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   // GET /health/live - Liveness Probe
@@ -70,6 +71,68 @@ export const healthRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         status: 'ready',
         database: dbStatus.latencyMs !== undefined ? { ok: true, latencyMs: dbStatus.latencyMs } : { ok: true },
         timestamp: new Date().toISOString()
+      });
+    }
+  );
+
+  // GET /health/metrics - Telemetría y Métricas Operativas
+  fastify.get(
+    '/health/metrics',
+    {
+      schema: {
+        description: 'Métricas operativas del servidor, pool de base de datos y memoria',
+        tags: ['Health'],
+        response: {
+          200: Type.Object({
+            status: Type.Literal('ok'),
+            timestamp: Type.String(),
+            uptimeSeconds: Type.Number(),
+            memory: Type.Object({
+              heapUsedMb: Type.Number(),
+              heapTotalMb: Type.Number(),
+              rssMb: Type.Number()
+            }),
+            database: Type.Object({
+              poolTotal: Type.Number(),
+              poolIdle: Type.Number(),
+              poolWaiting: Type.Number()
+            }),
+            caches: Type.Object({
+              padronEntries: Type.Number()
+            }),
+            runtime: Type.Object({
+              nodeVersion: Type.String(),
+              platform: Type.String()
+            })
+          })
+        }
+      }
+    },
+    async (_request, reply) => {
+      const mem = process.memoryUsage();
+      const poolStats = getDatabasePoolStats();
+
+      return reply.send({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptimeSeconds: Math.floor(process.uptime()),
+        memory: {
+          heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 100) / 100,
+          heapTotalMb: Math.round((mem.heapTotal / 1024 / 1024) * 100) / 100,
+          rssMb: Math.round((mem.rss / 1024 / 1024) * 100) / 100
+        },
+        database: {
+          poolTotal: poolStats.total,
+          poolIdle: poolStats.idle,
+          poolWaiting: poolStats.waiting
+        },
+        caches: {
+          padronEntries: TaxpayerService.getCacheSize()
+        },
+        runtime: {
+          nodeVersion: process.version,
+          platform: process.platform
+        }
       });
     }
   );

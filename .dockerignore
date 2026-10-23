@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.gitignore
+coverage
+backups
+*.log
+*.pem
+*.key
+*.crt
+*.csr
+tests
+.vscode
+.idea

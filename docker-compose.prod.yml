@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: arca_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-arca_db}
+      POSTGRES_USER: ${POSTGRES_USER:-arca_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arca_secure_password_change_me}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - arca_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arca_user} -d ${POSTGRES_DB:-arca_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arca_api_prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://${POSTGRES_USER:-arca_user}:${POSTGRES_PASSWORD:-arca_secure_password_change_me}@postgres:5432/${POSTGRES_DB:-arca_db}
+      DATABASE_MAX_CONNECTIONS: 20
+      LOG_LEVEL: info
+      API_KEY_MASTER: ${API_KEY_MASTER}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ARCA_DEFAULT_ENVIRONMENT: ${ARCA_DEFAULT_ENVIRONMENT:-production}
+      ARCA_PLATFORM_CUIT: ${ARCA_PLATFORM_CUIT}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+
+volumes:
+  arca_postgres_data:
+    driver: local

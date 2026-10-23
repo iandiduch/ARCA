@@ -17,7 +17,12 @@ const options: LoggerOptions = {
       'body.token',
       'body.sign',
       'body.privateKey',
-      'body.password'
+      'body.password',
+      '*.encryptedPrivateKey',
+      '*.privateKeyIv',
+      '*.privateKeyAuthTag',
+      '*.apiKeyHash',
+      '*.hashedSecret'
     ],
     censor: '[REDACTED]'
   }

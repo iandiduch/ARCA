@@ -13,7 +13,9 @@
     "test:coverage": "vitest run --coverage",
     "db:generate": "tsx ./node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "tsx src/infrastructure/database/migrate.ts",
-    "db:studio": "tsx ./node_modules/drizzle-kit/bin.cjs studio"
+    "db:studio": "tsx ./node_modules/drizzle-kit/bin.cjs studio",
+    "db:backup": "tsx scripts/backup-db.ts",
+    "db:restore": "tsx scripts/restore-db.ts"
   },
   "keywords": [
     "arca",
@@ -30,6 +32,7 @@
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@fastify/helmet": "^13.0.1",
+    "@fastify/rate-limit": "^11.2.1",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.2",
     "@fastify/type-provider-typebox": "^5.1.0",

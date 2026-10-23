@@ -34,7 +34,21 @@ export function errorHandler(error: FastifyError | AppError | Error, request: Fa
     });
   }
 
-  // Caso 3: Errores no controlados (500)
+  // Caso 3: Errores con statusCode HTTP de cliente (ej. 429 Rate Limit, 413 Payload Too Large)
+  const statusCode = (error as { statusCode?: number }).statusCode;
+  if (typeof statusCode === 'number' && statusCode < 500) {
+    const code = (error as { code?: string }).code || 'CLIENT_ERROR';
+    logger.warn({ err: error, reqId: request.id }, `[${code}] ${error.message}`);
+    return reply.status(statusCode).send({
+      statusCode,
+      error: code,
+      code,
+      message: error.message,
+      timestamp
+    });
+  }
+
+  // Caso 4: Errores no controlados (500)
   logger.error({ err: error, reqId: request.id }, 'Error no controlado en el servidor');
   return reply.status(500).send({
     statusCode: 500,

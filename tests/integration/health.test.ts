@@ -29,6 +29,35 @@ describe('Endpoints de Diagnóstico y Salud (Health Routes)', () => {
     expect(body.uptimeSeconds).toBeTypeOf('number');
   });
 
+  it('GET /health/ready debe responder 200 OK con estado de la base de datos', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health/ready'
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.status).toBe('ready');
+    expect(body.database.ok).toBe(true);
+    expect(body.database.latencyMs).toBeTypeOf('number');
+  });
+
+  it('GET /health/metrics debe responder 200 con telemetría de memoria, base de datos y uptime', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health/metrics'
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.status).toBe('ok');
+    expect(body.uptimeSeconds).toBeTypeOf('number');
+    expect(body.memory.heapUsedMb).toBeGreaterThan(0);
+    expect(body.database.poolTotal).toBeGreaterThanOrEqual(0);
+    expect(body.caches.padronEntries).toBeGreaterThanOrEqual(0);
+    expect(body.runtime.nodeVersion).toBeDefined();
+  });
+
   it('GET / debe responder con metadatos del servicio y enlaces a documentación', async () => {
     const response = await app.inject({
       method: 'GET',

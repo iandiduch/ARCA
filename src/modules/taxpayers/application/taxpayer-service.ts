@@ -24,6 +24,13 @@ export class TaxpayerService {
   }
 
   /**
+   * Retorna el número de registros en caché en memoria
+   */
+  public static getCacheSize(): number {
+    return TaxpayerService.cache.size;
+  }
+
+  /**
    * Consulta los datos fiscales oficiales de un contribuyente en el Padrón ARCA
    */
   public async getTaxpayerByCuit(tenantId: string, rawCuit: string): Promise<PadronPersonaResult> {
