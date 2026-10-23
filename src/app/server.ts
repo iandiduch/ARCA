@@ -12,6 +12,7 @@ import { customerRoutes } from '../modules/customers/presentation/customer-route
 import { productRoutes } from '../modules/products/presentation/product-routes.js';
 import { fiscalIdentityRoutes } from '../modules/fiscal-identities/presentation/fiscal-identity-routes.js';
 import { invoiceRoutes } from '../modules/invoices/presentation/invoice-routes.js';
+import { documentRoutes } from '../modules/documents/presentation/document-routes.js';
 import { logger } from './logger.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
@@ -109,6 +110,9 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
 
   // Rutas de Facturación Electrónica (Fase 5)
   await app.register(invoiceRoutes);
+
+  // Rutas de Documentos, Impresión Térmica, QR y Notificaciones (Fase 6)
+  await app.register(documentRoutes);
 
   // Ruta raíz informativa
   app.get('/', async (_req, reply) => {
