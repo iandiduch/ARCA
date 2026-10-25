@@ -13,3 +13,5 @@ Thumbs.db
 *.csr
 !certs/sample*
 backups/
+SRS.md
+docs/
