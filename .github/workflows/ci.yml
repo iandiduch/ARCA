@@ -1,4 +1,4 @@
-name: CI - Fundamentos ARCA API
+name: CI - ARCA API
 
 on:
   push:
@@ -10,6 +10,30 @@ jobs:
   test-and-build:
     name: Build & Test (TypeScript Strict + Vitest)
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: arca_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/arca_db
+      NODE_ENV: test
+      API_KEY_MASTER: dev-master-secret-key-change-in-production
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CORS_ORIGIN: "*"
+      ARCA_DEFAULT_ENVIRONMENT: homologation
+      ARCA_PLATFORM_CUIT: "20000000001"
 
     steps:
       - name: Checkout Code
@@ -27,8 +51,11 @@ jobs:
       - name: Type Check & Build
         run: npm run build
 
+      - name: Run Database Migrations
+        run: npm run db:migrate
+
       - name: Run Test Suite
         run: npm test
 
       - name: Verify Migrations Consistency
-        run: npx tsx ./node_modules/drizzle-kit/bin.cjs generate
+        run: npm run db:generate
