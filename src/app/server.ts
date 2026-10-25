@@ -19,6 +19,32 @@ import { taxpayerRoutes } from '../modules/taxpayers/presentation/taxpayer-route
 import { logger } from './logger.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
+/**
+ * Convierte un patrón de origen CORS (incluyendo wildcards como *.midominio.com o https://*.midominio.com)
+ * en un string exacto o un RegExp compatible con Fastify CORS.
+ */
+export function parseCorsOrigin(pattern: string): string | RegExp {
+  const trimmed = pattern.trim();
+  if (trimmed === '*') return '*';
+
+  if (trimmed.includes('*')) {
+    let raw = trimmed;
+    let proto = 'https?:\\/\\/';
+    if (/^https?:\/\//i.test(raw)) {
+      const match = raw.match(/^(https?:\/\/)(.*)$/i);
+      if (match && match[1] && match[2]) {
+        proto = match[1].replace(/\//g, '\\/');
+        raw = match[2];
+      }
+    }
+    const cleanDomain = raw.replace(/^\*\.?/, '');
+    const escapedDomain = cleanDomain.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${proto}(?:[a-zA-Z0-9-]+\\.)*${escapedDomain}(?::\\d+)?$`, 'i');
+  }
+
+  return trimmed;
+}
+
 export interface CreateAppOptions {
   container?: ServiceContainer;
   enableLogging?: boolean;
@@ -46,11 +72,10 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   await app.register(helmet, {
     contentSecurityPolicy: config.NODE_ENV === 'production'
   });
-
-  // Configuración de CORS con restricción de orígenes en producción
+  // Configuración de CORS con restricción de orígenes y soporte de wildcards (*.midominio.com)
   const allowedOrigins = config.CORS_ORIGIN === '*'
     ? true
-    : config.CORS_ORIGIN.split(',').map((o) => o.trim());
+    : config.CORS_ORIGIN.split(',').map(parseCorsOrigin);
 
   await app.register(cors, {
     origin: config.NODE_ENV === 'production' && config.CORS_ORIGIN !== '*'
