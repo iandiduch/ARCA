@@ -73,9 +73,23 @@ export class InvoicePdfService {
         doc.font('Helvetica-Bold').fontSize(14).fillColor('#111111');
         doc.text(identity.businessName.toUpperCase(), 40, headerY + 15, { width: 240 });
         doc.font('Helvetica').fontSize(9).fillColor('#444444');
-        doc.text('Condición IVA: Responsable Inscripto', 40, headerY + 50);
+        const taxConditionLabels: Record<string, string> = {
+          RESPONSABLE_INSCRIPTO: 'IVA Responsable Inscripto',
+          RESPONSABLE_MONOTRIBUTO: 'Responsable Monotributo',
+          EXENTO: 'IVA Sujeto Exento',
+          CONSUMIDOR_FINAL: 'Consumidor Final',
+          NO_RESPONSABLE: 'No Responsable'
+        };
+        const emisorTaxCond = (identity.taxCondition && taxConditionLabels[identity.taxCondition])
+          ? taxConditionLabels[identity.taxCondition]
+          : (identity.taxCondition || 'IVA Responsable Inscripto');
+
+        doc.text(`Condición IVA: ${emisorTaxCond}`, 40, headerY + 50);
         doc.text('Punto de Emisión: Casa Central', 40, headerY + 65);
-        doc.text(`Entorno: ${identity.environment === 'homologation' ? 'Homologación (Pruebas)' : 'Producción'}`, 40, headerY + 80);
+        if (identity.environment === 'homologation') {
+          doc.font('Helvetica-Oblique').fontSize(8).fillColor('#c0392b');
+          doc.text('Entorno: Homologación (Sin validez fiscal)', 40, headerY + 80);
+        }
 
         // Columna Derecha: Comprobante y Datos Fiscales
         doc.font('Helvetica-Bold').fontSize(14).fillColor('#111111');
@@ -85,8 +99,8 @@ export class InvoicePdfService {
         doc.font('Helvetica').fontSize(9).fillColor('#333333');
         doc.text(`Fecha de Emisión: ${dateFormatted}`, 315, headerY + 52);
         doc.text(`CUIT: ${formatCuit(identity.cuit)}`, 315, headerY + 67);
-        doc.text(`Ingresos Brutos: ${identity.cuit}`, 315, headerY + 82);
-        doc.text(`Inicio de Actividades: 01/01/2020`, 315, headerY + 97);
+        doc.text(`Ingresos Brutos: ${identity.grossIncomeNumber || identity.cuit}`, 315, headerY + 82);
+        doc.text(`Inicio de Actividades: ${identity.activityStartDate || '01/01/2020'}`, 315, headerY + 97);
 
         // ==========================================
         // 3. DATOS DEL CLIENTE / RECEPTOR

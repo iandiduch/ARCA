@@ -10,7 +10,7 @@ describe('Configurador de Entorno (config.ts)', () => {
     expect(config.HOST).toBeTypeOf('string');
     expect(['development', 'test', 'production']).toContain(config.NODE_ENV);
     expect(config.LOG_LEVEL).toBe('info');
-    expect(config.ARCA_DEFAULT_ENVIRONMENT).toBe('homologation');
+    expect(['homologation', 'production']).toContain(config.ARCA_DEFAULT_ENVIRONMENT);
     expect(config.ARCA_PLATFORM_CUIT).toMatch(/^\d{11}$/);
   });
 

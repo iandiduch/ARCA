@@ -116,4 +116,18 @@ describe('InvoicePdfService — Generación de Facturas PDF Reglamentarias ARCA'
     expect(pdfBuffer).toBeInstanceOf(Buffer);
     expect(pdfBuffer.slice(0, 5).toString('ascii')).toBe('%PDF-');
   });
+
+  it('3. Debe generar PDF en entorno de producción sin errores', async () => {
+    const prodIdentity: FiscalIdentity = {
+      ...mockIdentity,
+      environment: 'production',
+      taxCondition: 'RESPONSABLE_INSCRIPTO',
+      grossIncomeNumber: '30-71234567-8',
+      activityStartDate: '01/03/2015'
+    };
+
+    const pdfBuffer = await InvoicePdfService.generatePdf(mockInvoice, prodIdentity);
+    expect(pdfBuffer).toBeInstanceOf(Buffer);
+    expect(pdfBuffer.slice(0, 5).toString('ascii')).toBe('%PDF-');
+  });
 });
