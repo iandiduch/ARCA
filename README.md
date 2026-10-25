@@ -249,7 +249,9 @@ Este es el flujo cronológico que debes seguir una vez que levantes el contenedo
 
 ### Detalle de Peticiones HTTP del Asistente
 
-#### 1. Crear el Comercio (Tenant)
+#### 1. Crear el Comercio (Tenant) y su API Key
+
+**A. Crear el Comercio:**
 ```bash
 curl -X POST http://localhost:3000/api/v1/tenants \
   -H "x-api-key: <TU_API_KEY_MASTER>" \
@@ -262,19 +264,38 @@ curl -X POST http://localhost:3000/api/v1/tenants \
 *Respuesta (201 Created):*
 ```json
 {
-  "tenant": {
-    "id": "c1f7a240-...",
-    "name": "Mi Supermercado",
-    "slug": "mi-supermercado"
-  },
-  "apiKey": {
-    "id": "e2d3b4c5-...",
-    "key": "com_sec_a8f9c1e2d3...",
-    "role": "admin"
-  }
+  "id": "c1f7a240-5e3a-4a67-b501-8b7a421189aa",
+  "name": "Mi Supermercado",
+  "slug": "mi-supermercado",
+  "active": true,
+  "createdAt": "2026-10-25T00:00:00.000Z"
 }
 ```
-> ⚠️ **Guarda el `apiKey.key`:** Esta es la clave de comercio (`<TU_API_KEY_DE_COMERCIO>`) que utilizará tu POS para todas las operaciones subsiguientes.
+
+**B. Generar la API Key para el POS:**
+Con el `id` obtenido del paso anterior:
+```bash
+curl -X POST http://localhost:3000/api/v1/tenants/c1f7a240-5e3a-4a67-b501-8b7a421189aa/api-keys \
+  -H "x-api-key: <TU_API_KEY_MASTER>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "POS Principal",
+    "role": "pos_client"
+  }'
+```
+*Respuesta (201 Created):*
+```json
+{
+  "id": "e2d3b4c5-...",
+  "tenantId": "c1f7a240-5e3a-4a67-b501-8b7a421189aa",
+  "name": "POS Principal",
+  "prefix": "live_sec_...",
+  "role": "pos_client",
+  "rawKey": "live_sec_a8f9c1e2d345b6789...",
+  "createdAt": "2026-10-25T00:00:00.000Z"
+}
+```
+> ⚠️ **Guarda el `rawKey`:** Esta es la clave de comercio (`<TU_API_KEY_DE_COMERCIO>`) que configurás en tu POS para emitir facturas y administrar identidades fiscales. Solo se muestra una única vez al crearla.
 
 ---
 
