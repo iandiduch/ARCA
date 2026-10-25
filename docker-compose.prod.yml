@@ -59,7 +59,14 @@ services:
         limits:
           cpus: '2.0'
           memory: 1G
+    networks:
+      - dokploy-network
+      - default
 
 volumes:
   arca_postgres_data:
     driver: local
+
+networks:
+  dokploy-network:
+    external: true
