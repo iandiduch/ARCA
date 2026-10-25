@@ -238,17 +238,29 @@ export class FiscalIdentityService {
         { environment: identity.environment as any }
       );
 
-      // Guardar puntos de venta detectados
-      await this.repo.syncPointsOfSale(
-        identity.id,
-        ptos.map((p) => ({
-          fiscalIdentityId: identity.id,
-          number: p.nro,
-          type: p.emisionTipo,
-          description: `Punto de Venta ${p.nro} (${p.emisionTipo})`,
-          active: !p.bloqueado
-        }))
-      );
+      // Guardar puntos de venta detectados (o crear Punto 1 si el padrón no tiene ninguno en testing)
+      if (ptos.length === 0) {
+        await this.repo.syncPointsOfSale(identity.id, [
+          {
+            fiscalIdentityId: identity.id,
+            number: 1,
+            type: 'RECEPCION_ELECTRONICA',
+            description: 'Punto de Venta 1 (Homologación)',
+            active: true
+          }
+        ]);
+      } else {
+        await this.repo.syncPointsOfSale(
+          identity.id,
+          ptos.map((p) => ({
+            fiscalIdentityId: identity.id,
+            number: p.nro,
+            type: p.emisionTipo,
+            description: `Punto de Venta ${p.nro} (${p.emisionTipo})`,
+            active: !p.bloqueado
+          }))
+        );
+      }
 
       // Conexión exitosa
       const updated = await this.repo.update(tenantId, identity.id, {

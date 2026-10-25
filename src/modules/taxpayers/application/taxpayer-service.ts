@@ -15,6 +15,7 @@ export class TaxpayerService {
   private fiscalRepo = new FiscalIdentityRepository();
   private static cache = new Map<string, CacheEntry>();
   private static CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
+  private static MAX_CACHE_ENTRIES = 5000;
 
   /**
    * Limpia la caché en memoria (útil para pruebas)
@@ -92,7 +93,11 @@ export class TaxpayerService {
         }
       );
 
-      // Guardar en caché
+      // Guardar en caché con control de tamaño para prevenir fugas de memoria
+      if (TaxpayerService.cache.size >= TaxpayerService.MAX_CACHE_ENTRIES) {
+        const oldestKey = TaxpayerService.cache.keys().next().value;
+        if (oldestKey) TaxpayerService.cache.delete(oldestKey);
+      }
       TaxpayerService.cache.set(cuit, {
         data: result,
         expiresAt: Date.now() + TaxpayerService.CACHE_TTL_MS

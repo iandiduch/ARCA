@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { loadConfig } from '../../app/config.js';
 import { UnauthorizedError, ForbiddenError } from '../errors/app-error.js';
@@ -39,8 +40,12 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
     throw new UnauthorizedError('Credenciales ausentes. Debe proveer x-api-key o Authorization: Bearer <key>');
   }
 
-  // 1. Verificación de Master Key (Plataforma)
-  if (rawKey === config.API_KEY_MASTER) {
+  // 1. Verificación de Master Key (Plataforma) con protección contra Timing Attacks
+  const bufRaw = Buffer.from(rawKey);
+  const bufMaster = Buffer.from(config.API_KEY_MASTER);
+  const isMasterKey = bufRaw.length === bufMaster.length && crypto.timingSafeEqual(bufRaw, bufMaster);
+
+  if (isMasterKey) {
     request.authContext = {
       type: 'master',
       role: 'platform_admin'

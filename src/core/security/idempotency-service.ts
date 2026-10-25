@@ -61,6 +61,26 @@ export class IdempotencyService {
   }
 
   /**
+   * Espera activamente si una clave de idempotencia se encuentra en procesamiento por otra petición concurrente
+   */
+  public static async waitForCompletion(
+    tenantId: string,
+    key: string,
+    maxWaitMs: number = 10000,
+    pollIntervalMs: number = 100
+  ): Promise<IdempotencyAcquireResult> {
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWaitMs) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      const res = await this.acquire(tenantId, key);
+      if (res.state === 'CACHED' || res.state === 'ACQUIRED') {
+        return res;
+      }
+    }
+    return { state: 'IN_PROGRESS' };
+  }
+
+  /**
    * Registra el resultado exitoso de la operación idempotente para responder de inmediato en futuros reintentos
    */
   public static async complete(

@@ -15,7 +15,9 @@ export function getDatabasePool(): pg.Pool {
       connectionString: config.DATABASE_URL,
       max: config.DATABASE_MAX_CONNECTIONS,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000
+      connectionTimeoutMillis: 5000,
+      statement_timeout: config.DATABASE_STATEMENT_TIMEOUT_MS,
+      query_timeout: config.DATABASE_STATEMENT_TIMEOUT_MS
     });
 
     pool.on('error', (err) => {

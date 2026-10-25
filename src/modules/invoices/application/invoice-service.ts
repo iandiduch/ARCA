@@ -7,6 +7,7 @@ import { Wsfev1Client } from '../../arca/infrastructure/wsfev1/wsfev1-client.js'
 import { EncryptionService } from '../../../core/security/encryption.js';
 import { IdempotencyService } from '../../../core/security/idempotency-service.js';
 import { AuditService } from '../../audit/application/audit-service.js';
+import { FiscalLock } from '../../../core/security/fiscal-lock.js';
 import { isValidCuit } from '../../../core/fiscal/cuit-validator.js';
 import {
   getVoucherLetter,
@@ -160,7 +161,10 @@ export class InvoiceService {
   ): Promise<FullInvoice> {
     // 1. Control estricto de Idempotencia si el cliente envió idempotencyKey
     if (input.idempotencyKey) {
-      const idemp = await IdempotencyService.acquire(tenantId, input.idempotencyKey, 'invoices');
+      let idemp = await IdempotencyService.acquire(tenantId, input.idempotencyKey, 'invoices');
+      if (idemp.state === 'IN_PROGRESS') {
+        idemp = await IdempotencyService.waitForCompletion(tenantId, input.idempotencyKey);
+      }
       if (idemp.state === 'IN_PROGRESS') {
         throw new ConflictError(
           'Una solicitud de emisión idéntica con esta misma clave de idempotencia se encuentra actualmente en procesamiento'
@@ -173,7 +177,12 @@ export class InvoiceService {
     }
 
     try {
-      const result = await this.executeFiscalEmission(tenantId, input, userId);
+      const result = await FiscalLock.withLock(
+        input.fiscalIdentityId,
+        input.pointOfSaleNumber,
+        input.voucherType,
+        () => this.executeFiscalEmission(tenantId, input, userId)
+      );
 
       if (input.idempotencyKey) {
         await IdempotencyService.complete(tenantId, input.idempotencyKey, 201, result);
@@ -354,6 +363,7 @@ export class InvoiceService {
             fchVtoPago,
             monId: 'PES',
             monCotiz: 1,
+            condicionIvaReceptorId: draftInvoice.customerTaxCondition ?? (voucherLetter === 'A' ? 1 : 5),
             cbtesAsoc: input.associatedVouchers?.map((a) => ({
               tipo: a.voucherType,
               ptoVta: a.pointOfSale,
@@ -431,9 +441,10 @@ export class InvoiceService {
       const updated = await this.invoiceRepo.findById(tenantId, draftInvoice.id);
       return updated!;
     } else {
-      // Rechazado por ARCA
+      // Rechazado por ARCA: liberamos el voucherNumber en el registro rechazado para que no bloquee la numeración fiscal legal
       await this.invoiceRepo.update(tenantId, draftInvoice.id, {
         status: 'REJECTED',
+        voucherNumber: null,
         afipResult: 'R',
         afipXmlRequest: caeResponse.xmlRequest,
         afipXmlResponse: caeResponse.xmlResponse,
@@ -441,8 +452,15 @@ export class InvoiceService {
         afipObservations: caeResponse.observaciones
       });
 
-      const errorMsg = caeResponse.errores.map((e) => `[${e.code}] ${e.message}`).join(', ');
-      throw new FiscalError(`Comprobante rechazado por ARCA: ${errorMsg || 'Rechazado sin detalle'}`, caeResponse.errores);
+      const allDetails = [
+        ...caeResponse.errores.map((e) => `[Error ${e.code}] ${e.message}`),
+        ...caeResponse.observaciones.map((o) => `[Obs ${o.code}] ${o.message}`)
+      ];
+      const errorMsg = allDetails.join(', ');
+      throw new FiscalError(`Comprobante rechazado por ARCA: ${errorMsg || 'Rechazado sin detalle'}`, [
+        ...caeResponse.errores,
+        ...caeResponse.observaciones
+      ]);
     }
   }
 
@@ -573,16 +591,30 @@ export class InvoiceService {
   }
 
   private formatDateYyyyMmDd(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const formatter = new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(d);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
     return `${y}${m}${day}`;
   }
 
   private formatDateIso(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const formatter = new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(d);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
     return `${y}-${m}-${day}`;
   }
 

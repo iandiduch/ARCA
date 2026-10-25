@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import { FiscalError, InfrastructureError } from '../../../../core/errors/app-error.js';
+import { FiscalError, InfrastructureError, NotFoundError } from '../../../../core/errors/app-error.js';
 import { logger } from '../../../../app/logger.js';
 import type { WsfeAuth, WsfeClientOptions } from '../wsfev1/wsfev1-client.js';
 
@@ -62,10 +62,21 @@ export class PadronClient {
         isArray: (name) => name === 'impuesto' || name === 'errorConstancia'
       });
       const parsed = parser.parse(xmlResponse);
+      logger.info({ xmlResponse, parsed }, 'Respuesta cruda de Padrón A5 de ARCA');
+
+      const body = parsed['soapenv:Envelope']?.['soapenv:Body'] || parsed['Envelope']?.['Body'] || parsed['soap:Envelope']?.['soap:Body'];
+      const fault = body?.['soap:Fault'] || body?.['soapenv:Fault'] || body?.['Fault'];
+      if (fault) {
+        const faultStr = String(fault.faultstring || 'Error en consulta de padrón');
+        if (faultStr.toLowerCase().includes('no existe persona') || faultStr.toLowerCase().includes('no encontrada')) {
+          throw new NotFoundError(`El CUIT ${targetCuit} no fue encontrado en el Padrón de ARCA`);
+        }
+        throw new FiscalError(`Error de Padrón ARCA: ${faultStr}`);
+      }
 
       const personaReturn =
-        parsed['soapenv:Envelope']?.['soapenv:Body']?.['getPersonaResponse']?.['personaReturn'] ||
-        parsed['Envelope']?.['Body']?.['getPersonaResponse']?.['personaReturn'];
+        body?.['getPersonaResponse']?.['personaReturn'] ||
+        parsed['getPersonaResponse']?.['personaReturn'];
 
       if (!personaReturn) {
         throw new InfrastructureError('Respuesta inesperada al consultar Padrón A5 de ARCA');

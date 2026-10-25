@@ -83,19 +83,10 @@ export class WsaaClient {
     const response = await this.executeSoapRequest(endpoint, soapEnvelope, options?.timeoutMs ?? 15000);
     const parsed = this.parseLoginCmsResponse(response);
 
-    // 3. Guardar en caché (upsert)
-    if (cached) {
-      await db
-        .update(wsaaAccessTickets)
-        .set({
-          token: parsed.token,
-          sign: parsed.sign,
-          generationTime: parsed.generationTime,
-          expirationTime: parsed.expirationTime
-        })
-        .where(eq(wsaaAccessTickets.id, cached.id));
-    } else {
-      await db.insert(wsaaAccessTickets).values({
+    // 3. Guardar en caché (upsert atómico resistente a concurrencia)
+    await db
+      .insert(wsaaAccessTickets)
+      .values({
         fiscalIdentityId,
         service,
         environment,
@@ -103,8 +94,20 @@ export class WsaaClient {
         sign: parsed.sign,
         generationTime: parsed.generationTime,
         expirationTime: parsed.expirationTime
+      })
+      .onConflictDoUpdate({
+        target: [
+          wsaaAccessTickets.fiscalIdentityId,
+          wsaaAccessTickets.service,
+          wsaaAccessTickets.environment
+        ],
+        set: {
+          token: parsed.token,
+          sign: parsed.sign,
+          generationTime: parsed.generationTime,
+          expirationTime: parsed.expirationTime
+        }
       });
-    }
 
     return {
       token: parsed.token,

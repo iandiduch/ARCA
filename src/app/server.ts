@@ -47,8 +47,15 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
     contentSecurityPolicy: config.NODE_ENV === 'production'
   });
 
+  // Configuración de CORS con restricción de orígenes en producción
+  const allowedOrigins = config.CORS_ORIGIN === '*'
+    ? true
+    : config.CORS_ORIGIN.split(',').map((o) => o.trim());
+
   await app.register(cors, {
-    origin: true,
+    origin: config.NODE_ENV === 'production' && config.CORS_ORIGIN !== '*'
+      ? allowedOrigins
+      : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
   });

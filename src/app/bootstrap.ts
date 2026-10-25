@@ -2,11 +2,15 @@ import { createApp } from './server.js';
 import { loadConfig } from './config.js';
 import { logger } from './logger.js';
 import { closeDatabaseConnection } from '../infrastructure/database/connection.js';
+import { runMigrations } from '../infrastructure/database/migrate.js';
 
 async function bootstrap() {
   const config = loadConfig();
 
   try {
+    // 1. Ejecutar migraciones automáticas al iniciar
+    await runMigrations();
+
     const app = await createApp({ enableLogging: true });
 
     await app.listen({

@@ -45,7 +45,7 @@ export class Wsfev1Client {
         endpoint,
         'http://ar.gov.afip.dif.FEV1/FEDummy',
         soapBody,
-        options?.timeoutMs ?? 8000
+        options?.timeoutMs ?? 25000
       );
 
       const parser = new XMLParser();
@@ -173,6 +173,12 @@ export class Wsfev1Client {
     }
 
     if (result.Errors?.Err?.length) {
+      // Código 602 de ARCA: "Sin Resultados" (el contribuyente no tiene puntos de venta creados en el ambiente)
+      const isOnlySinResultados = result.Errors.Err.every((e: { Code?: number }) => Number(e.Code) === 602);
+      if (isOnlySinResultados) {
+        return [];
+      }
+
       const errs = result.Errors.Err.map((e: { Code?: number; Msg?: string }) => ({
         code: e.Code ?? 0,
         message: e.Msg ?? 'Error ARCA'
@@ -218,6 +224,7 @@ export class Wsfev1Client {
         fchVtoPago?: string | undefined;
         monId?: string | undefined;
         monCotiz?: number | undefined;
+        condicionIvaReceptorId?: number | undefined;
         cbtesAsoc?: Array<{ tipo: number; ptoVta: number; nro: number; cuit?: string | undefined }> | undefined;
         iva?: Array<{ id: number; baseImp: number; importe: number }> | undefined;
       };
@@ -275,6 +282,7 @@ export class Wsfev1Client {
             ${det.fchVtoPago ? `<fev:FchVtoPago>${det.fchVtoPago}</fev:FchVtoPago>` : ''}
             <fev:MonId>${det.monId || 'PES'}</fev:MonId>
             <fev:MonCotiz>${det.monCotiz || 1}</fev:MonCotiz>
+            ${det.condicionIvaReceptorId ? `<fev:CondicionIVAReceptorId>${det.condicionIvaReceptorId}</fev:CondicionIVAReceptorId>` : ''}
             ${
               det.cbtesAsoc && det.cbtesAsoc.length > 0
                 ? `<fev:CbtesAsoc>

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
-const envSchema = z.object({
+export const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -13,7 +13,27 @@ const envSchema = z.object({
   ARCA_DEFAULT_ENVIRONMENT: z.enum(['homologation', 'production']).default('homologation'),
   ARCA_PLATFORM_CUIT: z.string().regex(/^\d{11}$/).default('20000000001'),
   RATE_LIMIT_MAX: z.coerce.number().default(300),
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000)
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
+  CORS_ORIGIN: z.string().default('*'),
+  DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().default(10000)
+}).superRefine((data, ctx) => {
+  if (data.NODE_ENV === 'production') {
+    if (data.API_KEY_MASTER === 'dev-master-secret-key-change-in-production') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['API_KEY_MASTER'],
+        message: 'En entorno de producción (NODE_ENV=production), API_KEY_MASTER debe ser configurada con una clave secreta real y no el valor por defecto de desarrollo.'
+      });
+    }
+
+    if (data.ENCRYPTION_KEY === '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ENCRYPTION_KEY'],
+        message: 'En entorno de producción (NODE_ENV=production), ENCRYPTION_KEY debe ser una clave criptográfica real de 64 caracteres hex y no el valor por defecto de desarrollo.'
+      });
+    }
+  }
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

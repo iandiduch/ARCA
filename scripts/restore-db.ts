@@ -66,7 +66,9 @@ export async function restoreDatabase(backupFilePath: string): Promise<{
       if (rows.length > 0) {
         for (const row of rows) {
           const columns = Object.keys(row);
-          const values = Object.values(row);
+          const values = Object.values(row).map((v) =>
+            typeof v === 'object' && v !== null && !(v instanceof Date) ? JSON.stringify(v) : v
+          );
 
           const colList = columns.map((c) => `"${c}"`).join(', ');
           const paramPlaceholders = values.map((_, idx) => `$${idx + 1}`).join(', ');
