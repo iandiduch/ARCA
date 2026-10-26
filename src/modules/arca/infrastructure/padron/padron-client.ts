@@ -27,7 +27,7 @@ export class PadronClient {
   };
 
   /**
-   * Consulta los datos fiscales de un CUIT ante el Padrón A5 de ARCA
+   * Consulta los datos fiscales de un CUIT ante el Padrón (Constancia de Inscripción) de ARCA
    */
   public static async getPersona(
     auth: WsfeAuth,
@@ -41,19 +41,19 @@ export class PadronClient {
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:a5="http://a5.soap.ws.server.puc.sr/">
   <soapenv:Header/>
   <soapenv:Body>
-    <a5:getPersona>
+    <a5:getPersona_v2>
       <token>${auth.token}</token>
       <sign>${auth.sign}</sign>
       <cuitRepresentada>${auth.cuit}</cuitRepresentada>
       <idPersona>${targetCuit}</idPersona>
-    </a5:getPersona>
+    </a5:getPersona_v2>
   </soapenv:Body>
 </soapenv:Envelope>`.trim();
 
     try {
       const xmlResponse = await this.executeSoap(
         endpoint,
-        'http://a5.soap.ws.server.puc.sr/getPersona',
+        'http://a5.soap.ws.server.puc.sr/getPersona_v2',
         soapBody,
         options?.timeoutMs ?? 15000
       );
@@ -62,28 +62,36 @@ export class PadronClient {
         isArray: (name) => name === 'impuesto' || name === 'errorConstancia'
       });
       const parsed = parser.parse(xmlResponse);
-      logger.info({ xmlResponse, parsed }, 'Respuesta cruda de Padrón A5 de ARCA');
+      logger.info({ xmlResponse, parsed }, 'Respuesta cruda de Padrón Constancia de Inscripción de ARCA');
 
       const body = parsed['soapenv:Envelope']?.['soapenv:Body'] || parsed['Envelope']?.['Body'] || parsed['soap:Envelope']?.['soap:Body'];
       const fault = body?.['soap:Fault'] || body?.['soapenv:Fault'] || body?.['Fault'];
       if (fault) {
         const faultStr = String(fault.faultstring || 'Error en consulta de padrón');
-        if (faultStr.toLowerCase().includes('no existe persona') || faultStr.toLowerCase().includes('no encontrada')) {
+        if (faultStr.toLowerCase().includes('no existe') || faultStr.toLowerCase().includes('no encontrada') || faultStr.toLowerCase().includes('no encontrado')) {
           throw new NotFoundError(`El CUIT ${targetCuit} no fue encontrado en el Padrón de ARCA`);
         }
         throw new FiscalError(`Error de Padrón ARCA: ${faultStr}`);
       }
 
       const personaReturn =
+        body?.['getPersona_v2Response']?.['personaReturn'] ||
+        parsed['getPersona_v2Response']?.['personaReturn'] ||
         body?.['getPersonaResponse']?.['personaReturn'] ||
         parsed['getPersonaResponse']?.['personaReturn'];
 
       if (!personaReturn) {
-        throw new InfrastructureError('Respuesta inesperada al consultar Padrón A5 de ARCA');
+        throw new InfrastructureError('Respuesta inesperada al consultar Padrón Constancia de Inscripción de ARCA');
       }
 
       if (personaReturn.errorConstancia?.length) {
-        const msg = personaReturn.errorConstancia.join(', ');
+        const errors = Array.isArray(personaReturn.errorConstancia)
+          ? personaReturn.errorConstancia.map(String)
+          : [String(personaReturn.errorConstancia)];
+        const msg = errors.join(', ');
+        if (msg.toLowerCase().includes('no existe') || msg.toLowerCase().includes('no encontrada') || msg.toLowerCase().includes('no encontrado')) {
+          throw new NotFoundError(`El CUIT ${targetCuit} no fue encontrado en el Padrón de ARCA`);
+        }
         throw new FiscalError(`Error de Padrón ARCA: ${msg}`);
       }
 
@@ -96,19 +104,34 @@ export class PadronClient {
       const tipoPersona = dg.tipoPersona === 'JURIDICA' ? 'JURIDICA' : 'FISICA';
       const estadoClave = dg.estadoClave || 'ACTIVO';
 
-      // Deducir condición de IVA a partir de los impuestos registrados
-      const impuestos = [
-        ...(personaReturn.datosRegimenGeneral?.impuesto ?? []),
-        ...(personaReturn.datosMonotributo?.impuesto ?? [])
-      ];
+      // Impuestos del Régimen General y de Monotributo
+      const regGenImpuestos = Array.isArray(personaReturn.datosRegimenGeneral?.impuesto)
+        ? personaReturn.datosRegimenGeneral.impuesto
+        : personaReturn.datosRegimenGeneral?.impuesto
+          ? [personaReturn.datosRegimenGeneral.impuesto]
+          : [];
+
+      const monotributoImpuestos = Array.isArray(personaReturn.datosMonotributo?.impuesto)
+        ? personaReturn.datosMonotributo.impuesto
+        : personaReturn.datosMonotributo?.impuesto
+          ? [personaReturn.datosMonotributo.impuesto]
+          : [];
+
+      const impuestos = [...regGenImpuestos, ...monotributoImpuestos];
 
       let fiscalCondition: PadronPersonaResult['fiscalCondition'] = 'CONSUMIDOR_FINAL';
       let fiscalConditionCode = 5;
       let fiscalConditionName = 'Consumidor Final';
 
-      const hasIva = impuestos.some((i: { idImpuesto?: number }) => Number(i.idImpuesto) === 30);
-      const hasMonotributo = impuestos.some((i: { idImpuesto?: number }) => Number(i.idImpuesto) === 32);
-      const hasExento = impuestos.some((i: { idImpuesto?: number }) => Number(i.idImpuesto) === 33);
+      // Identificación de condición impositiva según normativas de AFIP/ARCA:
+      // - 30: IVA (Responsable Inscripto)
+      // - 20, 21, 22, 23, 24 o presencia de datosMonotributo: Monotributista
+      // - 32, 33, 34: IVA Exento
+      const hasIva = impuestos.some((i: { idImpuesto?: number | string }) => Number(i.idImpuesto) === 30);
+      const hasMonotributo =
+        Boolean(personaReturn.datosMonotributo?.categoriaMonotributo) ||
+        impuestos.some((i: { idImpuesto?: number | string }) => [20, 21, 22, 23, 24].includes(Number(i.idImpuesto)));
+      const hasExento = impuestos.some((i: { idImpuesto?: number | string }) => [32, 33, 34].includes(Number(i.idImpuesto)));
 
       if (hasIva) {
         fiscalCondition = 'IVA_RESPONSABLE_INSCRIPTO';
@@ -143,7 +166,7 @@ export class PadronClient {
         queriedAt: new Date()
       };
     } catch (err) {
-      logger.warn({ err, targetCuit }, 'Aviso en consulta de Padrón ARCA A5');
+      logger.warn({ err, targetCuit }, 'Aviso en consulta de Padrón ARCA Constancia de Inscripción');
       throw err;
     }
   }

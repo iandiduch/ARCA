@@ -77,7 +77,7 @@ export class TaxpayerService {
         cert.certificate,
         {
           environment: activeIdentity.environment as 'homologation' | 'production',
-          service: 'ws_sr_padron_a5'
+          service: 'ws_sr_constancia_inscripcion'
         }
       );
 
@@ -105,7 +105,7 @@ export class TaxpayerService {
 
       return result;
     } catch (err) {
-      logger.warn({ err, cuit }, 'Error al consultar servicio A5 de ARCA. Generando resolución estándar.');
+      logger.warn({ err, cuit }, 'Error al consultar servicio de Constancia de Inscripción de ARCA. Generando resolución estándar.');
       throw err;
     }
   }

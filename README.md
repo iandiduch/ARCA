@@ -206,7 +206,7 @@ Este es el flujo cronológico que debes seguir una vez que levantes el contenedo
 │   3. "Crear Computador Fiscal" -> Elegir alias (ej: postesting)        │
 │   4. Pegar el csrPem -> Descargar certificado (.crt)                   │
 │   5. "Autorización a Servicios" -> Autorizar alias en "wsfe" y         │
-│      "ws_sr_padron_a5"                                                 │
+│      "ws_sr_constancia_inscripcion" (Consulta Constancia Inscripción)   │
 │                                                                        │
 │ • En Producción (Real):                                                │
 │   1. Entrar a AFIP con Clave Fiscal Nivel 3 o superior                 │
@@ -216,6 +216,8 @@ Este es el flujo cronológico que debes seguir una vez que levantes el contenedo
 │   5. Abrir "Administrador de Relaciones de Clave Fiscal"               │
 │      -> "Nueva Relación" -> "AFIP" -> "WebServices"                    │
 │      -> "Facturación Electrónica" (wsfe) -> Asociar alias pos-prod     │
+│      -> "WS Padrón - Consulta Constancia Inscripción"                  │
+│         (ws_sr_constancia_inscripcion) -> Asociar alias pos-prod       │
 │   6. Abrir "Administración de Puntos de Venta y Domicilios"            │
 │      -> Dar de alta un Punto de Venta tipo "Factura Electrónica - WS"   │
 └──────────────────────────────────┬─────────────────────────────────────┘
