@@ -36,6 +36,13 @@
       "when": 1792792272142,
       "tag": "0004_watery_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793067511779,
+      "tag": "0005_modern_amphibian",
+      "breakpoints": true
     }
   ]
 }

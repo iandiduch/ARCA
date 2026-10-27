@@ -13,6 +13,8 @@ import type { FiscalIdentity } from '../../../infrastructure/database/schema/fis
 export interface CreateIdentityInput {
   cuit: string;
   businessName: string;
+  fantasyName?: string | undefined;
+  commercialAddress?: string | undefined;
   environment?: 'homologation' | 'production' | undefined;
   taxCondition?: string | undefined;
   grossIncomeNumber?: string | undefined;
@@ -56,6 +58,8 @@ export class FiscalIdentityService {
       tenantId,
       cuit: cleanCuit,
       businessName: input.businessName.trim(),
+      fantasyName: input.fantasyName?.trim() || null,
+      commercialAddress: input.commercialAddress?.trim() || null,
       environment,
       taxCondition: input.taxCondition ?? 'RESPONSABLE_MONOTRIBUTO',
       grossIncomeNumber: input.grossIncomeNumber?.trim() || null,
@@ -75,6 +79,51 @@ export class FiscalIdentityService {
     });
 
     return identity;
+  }
+
+  /**
+   * Actualiza los datos identificatorios/membrete de la identidad fiscal.
+   * Se usa, por ejemplo, para sincronizar el nombre de fantasía y el domicilio
+   * comercial que se imprimen en el comprobante, sin recrear la identidad.
+   */
+  public async updateIdentityData(
+    tenantId: string,
+    identityId: string,
+    input: {
+      businessName?: string | undefined;
+      fantasyName?: string | undefined;
+      commercialAddress?: string | undefined;
+      grossIncomeNumber?: string | undefined;
+      activityStartDate?: string | undefined;
+      taxCondition?: string | undefined;
+    },
+    userId?: string
+  ): Promise<FiscalIdentity> {
+    await this.getIdentityById(tenantId, identityId);
+
+    const data: Record<string, string | null> = {};
+    if (input.businessName !== undefined) data.businessName = input.businessName.trim();
+    if (input.fantasyName !== undefined) data.fantasyName = input.fantasyName.trim();
+    if (input.commercialAddress !== undefined) data.commercialAddress = input.commercialAddress.trim();
+    if (input.grossIncomeNumber !== undefined) data.grossIncomeNumber = input.grossIncomeNumber.trim();
+    if (input.activityStartDate !== undefined) data.activityStartDate = input.activityStartDate.trim();
+    if (input.taxCondition !== undefined && input.taxCondition.trim()) data.taxCondition = input.taxCondition.trim();
+
+    const updated = await this.repo.update(tenantId, identityId, data);
+    if (!updated) {
+      throw new NotFoundError(`Identidad fiscal con ID "${identityId}" no encontrada`);
+    }
+
+    await AuditService.record({
+      tenantId,
+      userId,
+      action: 'FISCAL_IDENTITY_UPDATED',
+      entityType: 'fiscal_identity',
+      entityId: identityId,
+      payload: data
+    });
+
+    return updated;
   }
 
   /**
@@ -358,6 +407,8 @@ export class FiscalIdentityService {
       id: identity.id,
       cuit: identity.cuit,
       businessName: identity.businessName,
+      fantasyName: identity.fantasyName,
+      commercialAddress: identity.commercialAddress,
       environment: identity.environment,
       connectionType: identity.connectionType,
       status: identity.status,

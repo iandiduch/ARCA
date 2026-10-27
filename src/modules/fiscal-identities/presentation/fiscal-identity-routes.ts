@@ -52,6 +52,8 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
         body: Type.Object({
           cuit: Type.String({ minLength: 11, maxLength: 13, description: 'CUIT del contribuyente emisor' }),
           businessName: Type.String({ minLength: 2, description: 'Razón Social o Nombre del titular' }),
+          fantasyName: Type.Optional(Type.String({ description: 'Nombre de fantasía / comercial que se imprime en el comprobante' })),
+          commercialAddress: Type.Optional(Type.String({ description: 'Domicilio comercial que se imprime en el comprobante' })),
           environment: Type.Optional(
             Type.Union([Type.Literal('homologation'), Type.Literal('production')], { default: 'homologation' })
           ),
@@ -67,6 +69,8 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
             id: Type.String(),
             cuit: Type.String(),
             businessName: Type.String(),
+            fantasyName: Type.Union([Type.String(), Type.Null()]),
+            commercialAddress: Type.Union([Type.String(), Type.Null()]),
             environment: Type.String(),
             connectionType: Type.String(),
             status: Type.String(),
@@ -84,6 +88,8 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
         id: created.id,
         cuit: created.cuit,
         businessName: created.businessName,
+        fantasyName: created.fantasyName,
+        commercialAddress: created.commercialAddress,
         environment: created.environment,
         connectionType: created.connectionType,
         status: created.status,
@@ -108,6 +114,8 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
               id: Type.String(),
               cuit: Type.String(),
               businessName: Type.String(),
+              fantasyName: Type.Union([Type.String(), Type.Null()]),
+              commercialAddress: Type.Union([Type.String(), Type.Null()]),
               environment: Type.String(),
               connectionType: Type.String(),
               status: Type.String(),
@@ -128,6 +136,8 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
           id: i.id,
           cuit: i.cuit,
           businessName: i.businessName,
+          fantasyName: i.fantasyName,
+          commercialAddress: i.commercialAddress,
           environment: i.environment,
           connectionType: i.connectionType,
           status: i.status,
@@ -136,6 +146,64 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
           createdAt: i.createdAt.toISOString()
         }))
       );
+    }
+  );
+
+  // PATCH /api/v1/fiscal-identities/:id - Actualizar datos del membrete emisor
+  fastify.patch(
+    '/api/v1/fiscal-identities/:id',
+    {
+      preHandler: [authenticate, requireTenant],
+      schema: {
+        description: 'Actualiza los datos de la identidad fiscal (razón social, nombre de fantasía, domicilio, condición IVA)',
+        tags: ['Fiscal Identities'],
+        security: [{ apiKeyAuth: [] }],
+        params: Type.Object({
+          id: Type.String({ format: 'uuid' })
+        }),
+        body: Type.Object({
+          businessName: Type.Optional(Type.String({ minLength: 2 })),
+          fantasyName: Type.Optional(Type.String()),
+          commercialAddress: Type.Optional(Type.String()),
+          grossIncomeNumber: Type.Optional(Type.String()),
+          activityStartDate: Type.Optional(Type.String()),
+          taxCondition: Type.Optional(Type.String())
+        }),
+        response: {
+          200: Type.Object({
+            id: Type.String(),
+            cuit: Type.String(),
+            businessName: Type.String(),
+            fantasyName: Type.Union([Type.String(), Type.Null()]),
+            commercialAddress: Type.Union([Type.String(), Type.Null()]),
+            environment: Type.String(),
+            connectionType: Type.String(),
+            status: Type.String(),
+            statusReason: Type.Union([Type.String(), Type.Null()])
+          })
+        }
+      }
+    },
+    async (request, reply) => {
+      const tenantId = request.tenant!.id;
+      const updated = await service.updateIdentityData(
+        tenantId,
+        request.params.id,
+        request.body,
+        request.authContext?.apiKeyId
+      );
+
+      return reply.send({
+        id: updated.id,
+        cuit: updated.cuit,
+        businessName: updated.businessName,
+        fantasyName: updated.fantasyName,
+        commercialAddress: updated.commercialAddress,
+        environment: updated.environment,
+        connectionType: updated.connectionType,
+        status: updated.status,
+        statusReason: updated.statusReason
+      });
     }
   );
 
@@ -156,6 +224,8 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
             id: Type.String(),
             cuit: Type.String(),
             businessName: Type.String(),
+            fantasyName: Type.Union([Type.String(), Type.Null()]),
+            commercialAddress: Type.Union([Type.String(), Type.Null()]),
             environment: Type.String(),
             connectionType: Type.String(),
             status: Type.String(),

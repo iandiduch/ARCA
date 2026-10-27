@@ -53,8 +53,12 @@ export class InvoicePdfService {
         // 2. ENCABEZADO FISCAL (Recuadro superior)
         // ==========================================
         const headerY = 30;
-        const headerHeight = 120;
+        const headerHeight = 132;
         doc.rect(30, headerY, 535, headerHeight).lineWidth(1).stroke('#333333');
+
+        // Designación de copia: un comprobante digital siempre es el ORIGINAL
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#333333');
+        doc.text('ORIGINAL', 30, 16, { width: 535, align: 'center' });
 
         // Letra central del comprobante ('A', 'B', 'C', 'M')
         const letterBoxWidth = 36;
@@ -70,9 +74,6 @@ export class InvoicePdfService {
         doc.moveTo(297, headerY + letterBoxHeight).lineTo(297, headerY + headerHeight).stroke('#333333');
 
         // Columna Izquierda: Emisor
-        doc.font('Helvetica-Bold').fontSize(14).fillColor('#111111');
-        doc.text(identity.businessName.toUpperCase(), 40, headerY + 15, { width: 240 });
-        doc.font('Helvetica').fontSize(9).fillColor('#444444');
         const taxConditionLabels: Record<string, string> = {
           RESPONSABLE_INSCRIPTO: 'IVA Responsable Inscripto',
           RESPONSABLE_MONOTRIBUTO: 'Responsable Monotributo',
@@ -84,11 +85,19 @@ export class InvoicePdfService {
           ? taxConditionLabels[identity.taxCondition]
           : (identity.taxCondition || 'IVA Responsable Inscripto');
 
-        doc.text(`Condición IVA: ${emisorTaxCond}`, 40, headerY + 50);
-        doc.text('Punto de Emisión: Casa Central', 40, headerY + 65);
+        // Nombre de fantasía como título destacado (con fallback a la razón social)
+        const emisorTitle = (identity.fantasyName?.trim() || identity.businessName).toUpperCase();
+        doc.font('Helvetica-Bold').fontSize(13).fillColor('#111111');
+        doc.text(emisorTitle, 40, headerY + 12, { width: 240 });
+
+        doc.font('Helvetica').fontSize(8.5).fillColor('#444444');
+        doc.text(`Razón Social: ${identity.businessName}`, 40, headerY + 34, { width: 245 });
+        doc.text(`Domicilio Comercial: ${identity.commercialAddress?.trim() || '-'}`, 40, headerY + 48, { width: 245 });
+        doc.text(`Condición frente al IVA: ${emisorTaxCond}`, 40, headerY + 62, { width: 245 });
+        doc.text('Punto de Emisión: Casa Central', 40, headerY + 76, { width: 245 });
         if (identity.environment === 'homologation') {
           doc.font('Helvetica-Oblique').fontSize(8).fillColor('#c0392b');
-          doc.text('Entorno: Homologación (Sin validez fiscal)', 40, headerY + 80);
+          doc.text('Entorno: Homologación (Sin validez fiscal)', 40, headerY + 92);
         }
 
         // Columna Derecha: Comprobante y Datos Fiscales
@@ -103,9 +112,31 @@ export class InvoicePdfService {
         doc.text(`Inicio de Actividades: ${identity.activityStartDate || '01/01/2020'}`, 315, headerY + 97);
 
         // ==========================================
-        // 3. DATOS DEL CLIENTE / RECEPTOR
+        // 3. PERIODO FACTURADO Y VENCIMIENTO DE PAGO
         // ==========================================
-        const clientY = headerY + headerHeight + 10;
+        // En un POS cobramos en el momento por algo tangible, así que por defecto
+        // las tres fechas coinciden con la fecha de emisión del comprobante.
+        const fmtPeriodDate = (d: Date | string | null | undefined): string =>
+          d
+            ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
+            : dateFormatted;
+        const issueRef = invoice.issueDate ?? invoice.createdAt;
+        const periodFrom = fmtPeriodDate(invoice.serviceDateFrom ?? issueRef);
+        const periodTo = fmtPeriodDate(invoice.serviceDateTo ?? issueRef);
+        const paymentDue = fmtPeriodDate(invoice.paymentDueDate ?? issueRef);
+
+        const periodY = headerY + headerHeight + 8;
+        const periodHeight = 22;
+        doc.rect(30, periodY, 535, periodHeight).lineWidth(0.8).stroke('#666666');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#222222');
+        doc.text(`Período Facturado Desde: ${periodFrom}`, 38, periodY + 7, { width: 195 });
+        doc.text(`Hasta: ${periodTo}`, 238, periodY + 7, { width: 100 });
+        doc.text(`Fecha de Vto. para el Pago: ${paymentDue}`, 345, periodY + 7, { width: 215 });
+
+        // ==========================================
+        // 4. DATOS DEL CLIENTE / RECEPTOR
+        // ==========================================
+        const clientY = periodY + periodHeight + 8;
         const clientHeight = 60;
         doc.rect(30, clientY, 535, clientHeight).lineWidth(0.8).stroke('#666666');
 
@@ -124,7 +155,7 @@ export class InvoicePdfService {
         doc.font('Helvetica').text(invoice.customerAddress || 'Ciudad Autónoma de Buenos Aires', 295, clientY + 30, { width: 260 });
 
         // ==========================================
-        // 4. TABLA DE ÍTEMS Y PRODUCTOS
+        // 5. TABLA DE ÍTEMS Y PRODUCTOS
         // ==========================================
         const tableY = clientY + clientHeight + 10;
         doc.rect(30, tableY, 535, 20).fill('#e9ecef');
@@ -154,7 +185,7 @@ export class InvoicePdfService {
         }
 
         // ==========================================
-        // 5. TOTALES Y DESGLOSE IMPOSITIVO
+        // 6. TOTALES Y DESGLOSE IMPOSITIVO
         // ==========================================
         const totalsY = 660;
         doc.rect(30, totalsY, 535, 50).lineWidth(0.8).stroke('#888888');
@@ -180,7 +211,7 @@ export class InvoicePdfService {
         doc.text(`$ ${Number(invoice.totalAmount).toFixed(2)}`, 440, totalsY + 16, { width: 110, align: 'right' });
 
         // ==========================================
-        // 6. PIE FISCAL (QR, CAE Y VENCIMIENTO)
+        // 7. PIE FISCAL (QR, CAE Y VENCIMIENTO)
         // ==========================================
         const footerY = 720;
         doc.rect(30, footerY, 535, 85).lineWidth(1).stroke('#333333');

@@ -10,6 +10,8 @@ export const fiscalIdentities = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     cuit: text('cuit').notNull(), // 11 dígitos numéricos
     businessName: text('business_name').notNull(),
+    fantasyName: text('fantasy_name'), // Nombre de fantasía / comercial (membrete del comprobante)
+    commercialAddress: text('commercial_address'), // Domicilio comercial que figura en el comprobante
     environment: text('environment').default('homologation').notNull(), // 'homologation' | 'production'
     taxCondition: text('tax_condition').default('RESPONSABLE_MONOTRIBUTO').notNull(),
     grossIncomeNumber: text('gross_income_number'), // Ingresos Brutos
