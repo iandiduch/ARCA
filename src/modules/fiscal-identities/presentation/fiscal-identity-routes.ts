@@ -316,4 +316,33 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
       });
     }
   );
+
+  // DELETE /api/v1/fiscal-identities/:id - Eliminar identidad fiscal
+  fastify.delete(
+    '/api/v1/fiscal-identities/:id',
+    {
+      preHandler: [authenticate, requireTenant],
+      schema: {
+        description: 'Elimina una identidad fiscal del comercio (bloqueado si ya emitió comprobantes)',
+        tags: ['Fiscal Identities'],
+        security: [{ apiKeyAuth: [] }],
+        params: Type.Object({
+          id: Type.String({ format: 'uuid' })
+        }),
+        response: {
+          200: Type.Object({
+            message: Type.String()
+          })
+        }
+      }
+    },
+    async (request, reply) => {
+      const tenantId = request.tenant!.id;
+      await service.deleteIdentity(tenantId, request.params.id, request.authContext?.apiKeyId);
+
+      return reply.send({
+        message: 'Identidad fiscal eliminada exitosamente'
+      });
+    }
+  );
 };

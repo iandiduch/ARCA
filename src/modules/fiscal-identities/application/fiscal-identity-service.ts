@@ -323,6 +323,32 @@ export class FiscalIdentityService {
     return this.repo.listByTenant(tenantId);
   }
 
+  /**
+   * Elimina una identidad fiscal. Se bloquea si ya existen comprobantes emitidos,
+   * para no destruir historial fiscal autorizado por ARCA.
+   */
+  public async deleteIdentity(tenantId: string, id: string, userId?: string): Promise<void> {
+    const identity = await this.getIdentityById(tenantId, id);
+
+    const invoiceCount = await this.repo.countInvoices(identity.id);
+    if (invoiceCount > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la identidad fiscal ${identity.cuit}: posee ${invoiceCount} comprobante(s) emitido(s).`
+      );
+    }
+
+    await this.repo.delete(tenantId, identity.id);
+
+    await AuditService.record({
+      tenantId,
+      userId,
+      action: 'FISCAL_IDENTITY_DELETED',
+      entityType: 'fiscal_identity',
+      entityId: identity.id,
+      payload: { cuit: identity.cuit, environment: identity.environment }
+    });
+  }
+
   public async getStatus(tenantId: string, id: string) {
     const identity = await this.getIdentityById(tenantId, id);
     const cert = await this.repo.getActiveCertificate(identity.id);

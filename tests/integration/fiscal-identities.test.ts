@@ -5,6 +5,7 @@ import { createApp } from '../../src/app/server.js';
 import { closeDatabaseConnection, getDatabase } from '../../src/infrastructure/database/connection.js';
 import { loadConfig } from '../../src/app/config.js';
 import { fiscalCertificates } from '../../src/infrastructure/database/schema/fiscal-certificates.js';
+import { invoices } from '../../src/infrastructure/database/schema/invoices.js';
 import { eq } from 'drizzle-orm';
 import { EncryptionService } from '../../src/core/security/encryption.js';
 
@@ -14,6 +15,7 @@ describe('Identidades Fiscales y Asistente ARCA (Fase 4)', () => {
 
   let tenantAKey: string;
   let tenantBKey: string;
+  let tenantAId: string;
   let identityAId: string;
 
   beforeAll(async () => {
@@ -28,6 +30,7 @@ describe('Identidades Fiscales y Asistente ARCA (Fase 4)', () => {
       payload: { name: 'Comercio Fiscal A', slug: `fiscal-test-a-${Date.now()}` }
     });
     const tenantA = resA.json();
+    tenantAId = tenantA.id;
 
     const keyResA = await app.inject({
       method: 'POST',
@@ -202,5 +205,74 @@ describe('Identidades Fiscales y Asistente ARCA (Fase 4)', () => {
       headers: { 'x-api-key': tenantBKey }
     });
     expect(resCsr.statusCode).toBe(404);
+  });
+
+  it('6. AISLAMIENTO: Comercio B NO puede eliminar identidades del Comercio A', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/fiscal-identities/${identityAId}`,
+      headers: { 'x-api-key': tenantBKey }
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('7. Eliminar una identidad fiscal sin comprobantes emitidos', async () => {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/fiscal-identities',
+      headers: { 'x-api-key': tenantAKey },
+      payload: {
+        cuit: '30712345671',
+        businessName: 'Comercio Descartable SRL',
+        environment: 'homologation'
+      }
+    });
+    expect(createRes.statusCode).toBe(201);
+    const throwawayId = createRes.json().id;
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/fiscal-identities/${throwawayId}`,
+      headers: { 'x-api-key': tenantAKey }
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().message).toContain('eliminada');
+
+    // Ya no debe existir
+    const statusRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/fiscal-identities/${throwawayId}/status`,
+      headers: { 'x-api-key': tenantAKey }
+    });
+    expect(statusRes.statusCode).toBe(404);
+  });
+
+  it('8. Rechazar la eliminacion de una identidad con comprobantes emitidos', async () => {
+    const db = getDatabase();
+    await db.insert(invoices).values({
+      tenantId: tenantAId,
+      fiscalIdentityId: identityAId,
+      pointOfSaleNumber: 1,
+      voucherType: 6,
+      voucherLetter: 'B',
+      totalAmount: '100.00'
+    });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/fiscal-identities/${identityAId}`,
+      headers: { 'x-api-key': tenantAKey }
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toContain('comprobante');
+
+    // La identidad debe seguir existiendo
+    const statusRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/fiscal-identities/${identityAId}/status`,
+      headers: { 'x-api-key': tenantAKey }
+    });
+    expect(statusRes.statusCode).toBe(200);
   });
 });

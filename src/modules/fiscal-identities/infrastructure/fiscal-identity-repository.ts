@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import {
   fiscalIdentities,
@@ -15,6 +15,7 @@ import {
   type PointOfSale,
   type NewPointOfSale
 } from '../../../infrastructure/database/schema/points-of-sale.js';
+import { invoices } from '../../../infrastructure/database/schema/invoices.js';
 
 export class FiscalIdentityRepository {
   public async create(data: NewFiscalIdentity): Promise<FiscalIdentity> {
@@ -59,6 +60,26 @@ export class FiscalIdentityRepository {
   public async listByTenant(tenantId: string): Promise<FiscalIdentity[]> {
     const db = getDatabase();
     return db.select().from(fiscalIdentities).where(eq(fiscalIdentities.tenantId, tenantId));
+  }
+
+  public async countInvoices(fiscalIdentityId: string): Promise<number> {
+    const db = getDatabase();
+    const [row] = await db
+      .select({ count: sql<number>`cast(count(*) as integer)` })
+      .from(invoices)
+      .where(eq(invoices.fiscalIdentityId, fiscalIdentityId));
+
+    return row?.count ?? 0;
+  }
+
+  public async delete(tenantId: string, id: string): Promise<boolean> {
+    const db = getDatabase();
+    const [deleted] = await db
+      .delete(fiscalIdentities)
+      .where(and(eq(fiscalIdentities.tenantId, tenantId), eq(fiscalIdentities.id, id)))
+      .returning();
+
+    return Boolean(deleted);
   }
 
   public async update(

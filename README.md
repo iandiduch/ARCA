@@ -385,6 +385,17 @@ curl -X POST http://localhost:3000/api/v1/fiscal-identities/f58a72b1-6a2c-4912-8
 }
 ```
 
+#### 6. Eliminar una Identidad Fiscal
+Da de baja una identidad del comercio. Se rechaza con 409 si esa identidad ya tiene comprobantes emitidos, para no perder historial fiscal autorizado por ARCA.
+```bash
+curl -X DELETE http://localhost:3000/api/v1/fiscal-identities/f58a72b1-6a2c-4912-8bb4-098845112233 \
+  -H "x-api-key: <TU_API_KEY_DE_COMERCIO>"
+```
+*Respuesta (200 OK):*
+```json
+{ "message": "Identidad fiscal eliminada exitosamente" }
+```
+
 ---
 
 ## 📖 Emisión de Facturas y Comprobantes (API)
@@ -513,8 +524,8 @@ npm run test:coverage
 ```
 
 **Resultados:**
-* 24 suites de prueba passing (`24 passed`).
-* 102 tests automáticos passing (`102 passed`).
+* 26 suites de prueba passing (`26 passed`).
+* 116 tests automáticos passing (`116 passed`).
 
 ---
 
