@@ -20,8 +20,8 @@ const InvoiceItemInputSchema = Type.Object({
   quantity: Type.Number({ minimum: 0.0001, description: 'Cantidad vendida' }),
   unitPrice: Type.Number({ minimum: 0, description: 'Precio unitario' }),
   discount: Type.Optional(Type.Number({ minimum: 0, default: 0, description: 'Descuento aplicado al ítem' })),
-  vatRate: Type.Optional(Type.Number({ description: 'Alícuota de IVA (21, 10.5, 0, 27)', default: 21 })),
-  vatAfipCode: Type.Optional(Type.Integer({ description: 'Código AFIP de alícuota (5=21%, 4=10.5%, 3=0%, 6=27%)' }))
+  vatRate: Type.Optional(Type.Number({ description: 'Alícuota de IVA (0, 2.5, 5, 10.5, 21, 27). Por defecto 21, o la del vatAfipCode' })),
+  vatAfipCode: Type.Optional(Type.Integer({ description: 'Código AFIP de alícuota (1=No Gravado, 2=Exento, 3=0%, 4=10.5%, 5=21%, 6=27%, 8=5%, 9=2.5%)' }))
 });
 
 const AssociatedVoucherInputSchema = Type.Object({

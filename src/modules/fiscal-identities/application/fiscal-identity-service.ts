@@ -227,10 +227,18 @@ export class FiscalIdentityService {
       validTo: metadata.validTo
     });
 
-    await this.repo.update(tenantId, identity.id, {
-      status: 'AUTHORIZATION_PENDING',
-      statusReason: 'Certificado verificado. Recuerde asociar el computador fiscal al servicio "Facturación Electrónica" en ARCA.'
-    });
+    // En una renovación de una identidad ya conectada no se corta la emisión: el certificado nuevo
+    // se valida en la próxima prueba de conexión (o al renovar el ticket WSAA).
+    if (identity.status === 'CONNECTED') {
+      await this.repo.update(tenantId, identity.id, {
+        statusReason: 'Certificado renovado. Ejecute la prueba de conexión para validarlo con ARCA.'
+      });
+    } else {
+      await this.repo.update(tenantId, identity.id, {
+        status: 'AUTHORIZATION_PENDING',
+        statusReason: 'Certificado verificado. Recuerde asociar el computador fiscal al servicio "Facturación Electrónica" en ARCA.'
+      });
+    }
 
     await AuditService.record({
       tenantId,
@@ -293,7 +301,13 @@ export class FiscalIdentityService {
         { environment: identity.environment as any }
       );
 
-      // Guardar puntos de venta detectados (o crear Punto 1 si el padrón no tiene ninguno en testing)
+      // Guardar puntos de venta detectados. Sólo en homologación se crea un Punto 1 de prueba si no hay ninguno:
+      // en producción emitir con un punto de venta inexistente sería rechazado por ARCA.
+      if (ptos.length === 0 && identity.environment === 'production') {
+        throw new ValidationError(
+          'ARCA no informa puntos de venta habilitados para Web Services en este CUIT. Cree uno en "Administración de Puntos de Venta y Domicilios" (sistema "Factura Electrónica - Monotributo / RECE") y vuelva a probar la conexión.'
+        );
+      }
       if (ptos.length === 0) {
         await this.repo.syncPointsOfSale(identity.id, [
           {

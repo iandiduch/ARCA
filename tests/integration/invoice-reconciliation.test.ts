@@ -329,4 +329,24 @@ describe('Conciliación de comprobantes interrumpidos y numeración fiscal', () 
     expect(resNext.statusCode).toBe(409);
     expect(resNext.json().details.invoiceId).toBe(pendingId);
   });
+
+  it('8. Rechaza tipos de comprobante no soportados', async () => {
+    const res = await emit({}, { voucherType: 201 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toContain('no soportado');
+  });
+
+  it('9. No emite si la identidad fiscal no está CONNECTED', async () => {
+    const db = getDatabase();
+    await db.update(fiscalIdentities).set({ status: 'ACTION_REQUIRED' }).where(eq(fiscalIdentities.id, fiscalIdentityId));
+    const solicitarSpy = vi.spyOn(Wsfev1Client, 'solicitarCae');
+
+    const res = await emit();
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toContain('no está habilitada para emitir');
+    expect(solicitarSpy).not.toHaveBeenCalled();
+
+    await db.update(fiscalIdentities).set({ status: 'CONNECTED' }).where(eq(fiscalIdentities.id, fiscalIdentityId));
+  });
 });
+

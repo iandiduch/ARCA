@@ -18,7 +18,9 @@ import {
   getVoucherLetter,
   isCreditNote,
   isDebitNote,
-  requiresVatBreakdown
+  requiresVatBreakdown,
+  resolveItemVat,
+  SUPPORTED_VOUCHER_TYPES
 } from '../../../core/fiscal/tax-catalogs.js';
 import {
   ValidationError,
@@ -174,8 +176,7 @@ export class InvoiceService {
   ): Promise<FullInvoice> {
     // 1. Control estricto de Idempotencia si el cliente envió idempotencyKey
     if (input.idempotencyKey) {
-      const { idempotencyKey: _key, ...fingerprintPayload } = input;
-      const idempOptions = { requestHash: IdempotencyService.hashPayload(fingerprintPayload) };
+      const idempOptions = { requestHash: IdempotencyService.hashPayload(this.fingerprint(input)) };
       let idemp = await IdempotencyService.acquire(tenantId, input.idempotencyKey, 'invoices', idempOptions);
       if (idemp.state === 'IN_PROGRESS') {
         // Reintento del POS tras una emisión interrumpida: conciliar primero con ARCA.
@@ -243,6 +244,17 @@ export class InvoiceService {
     // A. Validar identidad fiscal y certificado activo
     const { identity, cert } = await this.loadIdentityAndCertificate(tenantId, input.fiscalIdentityId);
     const environment = identity.environment as ArcaEnvironment;
+
+    if (identity.status !== 'CONNECTED') {
+      throw new ValidationError(
+        `La identidad fiscal ${identity.cuit} no está habilitada para emitir (estado ${identity.status}). Ejecute la prueba de conexión con ARCA.`
+      );
+    }
+    if (cert.validTo && cert.validTo.getTime() <= Date.now()) {
+      throw new ValidationError(
+        `El certificado de la identidad fiscal ${identity.cuit} venció el ${cert.validTo.toISOString().slice(0, 10)}. Renuévelo para seguir emitiendo.`
+      );
+    }
 
     // B. Validar punto de venta
     const ptos = await this.fiscalRepo.getPointsOfSale(identity.id);
@@ -734,6 +746,23 @@ export class InvoiceService {
     return this.invoiceRepo.list(tenantId, filters);
   }
 
+  /**
+   * Huella de la operación para idempotencia: normaliza los valores por defecto para que un reintento
+   * equivalente (p. ej. sin repetir vatRate: 21) no se considere un payload distinto.
+   */
+  private fingerprint(input: EmitInvoiceInput): unknown {
+    const { idempotencyKey: _key, items, ...rest } = input;
+    return {
+      ...rest,
+      concept: input.concept ?? 1,
+      pricesIncludeVat: input.pricesIncludeVat !== false,
+      items: items.map((it) => {
+        const vat = resolveItemVat(it.vatRate, it.vatAfipCode);
+        return { ...it, discount: it.discount ?? 0, vatRate: vat.rate, vatAfipCode: vat.afipCode };
+      })
+    };
+  }
+
   private formatDateYyyyMmDd(d: Date): string {
     const formatter = new Intl.DateTimeFormat('es-AR', {
       timeZone: 'America/Argentina/Buenos_Aires',
@@ -773,6 +802,12 @@ export class InvoiceService {
   private validateFiscalRules(input: EmitInvoiceInput): void {
     if (!input.items || input.items.length === 0) {
       throw new ValidationError('El comprobante debe contener al menos un ítem');
+    }
+
+    if (!SUPPORTED_VOUCHER_TYPES.includes(input.voucherType)) {
+      throw new ValidationError(
+        `Tipo de comprobante ${input.voucherType} no soportado. Valores admitidos: ${SUPPORTED_VOUCHER_TYPES.join(', ')}`
+      );
     }
 
     const docType = input.customer?.docType ?? 99;

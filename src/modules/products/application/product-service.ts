@@ -1,5 +1,5 @@
 import { ProductRepository, type ListProductsOptions } from '../infrastructure/product-repository.js';
-import { resolveIvaCode, UNIT_MEASURES } from '../../../core/fiscal/tax-catalogs.js';
+import { resolveItemVat, UNIT_MEASURES } from '../../../core/fiscal/tax-catalogs.js';
 import { ValidationError, ConflictError, NotFoundError } from '../../../core/errors/app-error.js';
 import { AuditService } from '../../audit/application/audit-service.js';
 import type { Product } from '../../../infrastructure/database/schema/products.js';
@@ -60,7 +60,7 @@ export class ProductService {
       }
     }
 
-    const ivaDefinition = resolveIvaCode(input.ivaRate ?? 21.0);
+    const ivaDefinition = resolveItemVat(input.ivaRate);
     const unitMeasureKey = (input.unitMeasure ?? 'UNIDAD').toUpperCase();
     const unitMeasureMapping = UNIT_MEASURES[unitMeasureKey] ?? UNIT_MEASURES.UNIDAD!;
 
@@ -144,7 +144,7 @@ export class ProductService {
     }
 
     if (input.ivaRate !== undefined) {
-      const iva = resolveIvaCode(input.ivaRate);
+      const iva = resolveItemVat(input.ivaRate);
       updateData.ivaRate = iva.rate.toFixed(2);
       updateData.ivaCode = iva.afipCode;
     }
