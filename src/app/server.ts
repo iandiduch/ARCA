@@ -17,6 +17,7 @@ import { documentRoutes } from '../modules/documents/presentation/document-route
 import { reportRoutes } from '../modules/reports/presentation/report-routes.js';
 import { taxpayerRoutes } from '../modules/taxpayers/presentation/taxpayer-routes.js';
 import { logger } from './logger.js';
+import { rateLimitKey } from '../core/security/rate-limit-key.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
 /**
@@ -45,6 +46,17 @@ export function parseCorsOrigin(pattern: string): string | RegExp {
   return trimmed;
 }
 
+/**
+ * TRUST_PROXY: "false" (default), "true", un número de saltos (p. ej. "1") o una lista de IPs/CIDR separadas por coma.
+ */
+export function parseTrustProxy(value: string): boolean | number | string {
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed === 'false') return false;
+  if (trimmed === 'true') return true;
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  return trimmed;
+}
+
 export interface CreateAppOptions {
   container?: ServiceContainer;
   enableLogging?: boolean;
@@ -55,7 +67,11 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   const container = options?.container || getContainer();
   const config = container.config;
 
-  const fastifyOptions: FastifyServerOptions = {};
+  const fastifyOptions: FastifyServerOptions = {
+    // Detrás de un proxy inverso (Traefik/Dokploy) request.ip debe ser la IP real del cliente
+    // Fastify admite un número de saltos aunque sus tipos no lo declaren
+    trustProxy: parseTrustProxy(config.TRUST_PROXY) as NonNullable<FastifyServerOptions['trustProxy']>
+  };
 
   if (options?.enableLogging !== false) {
     fastifyOptions.loggerInstance = logger;
@@ -89,13 +105,8 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   await app.register(rateLimit, {
     max: options?.rateLimitMax ?? (config.NODE_ENV === 'test' ? 10000 : config.RATE_LIMIT_MAX),
     timeWindow: config.RATE_LIMIT_WINDOW_MS,
-    keyGenerator: (request) => {
-      const apiKey = request.headers['x-api-key'];
-      if (typeof apiKey === 'string' && apiKey.length > 0) {
-        return apiKey;
-      }
-      return request.ip;
-    },
+    // Bucket por API Key sólo para claves ya autenticadas; el resto (incluidas claves falsas) se limita por IP
+    keyGenerator: (request) => rateLimitKey(request.headers, request.ip),
     errorResponseBuilder: (_request, context) => ({
       statusCode: 429,
       code: 'RATE_LIMIT_EXCEEDED',

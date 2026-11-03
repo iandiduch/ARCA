@@ -15,6 +15,8 @@ export const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().default(300),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
   CORS_ORIGIN: z.string().default('*'),
+  // Saltos de proxy inverso confiables para tomar la IP real de X-Forwarded-For ("1" detrás de Traefik)
+  TRUST_PROXY: z.string().default('false'),
   DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().default(10000),
   // Pool separado para los bloqueos de secuencia fiscal / WSAA: no compite con las consultas normales
   DATABASE_LOCK_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(10),

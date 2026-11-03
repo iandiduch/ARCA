@@ -3,6 +3,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { loadConfig } from '../../app/config.js';
 import { UnauthorizedError, ForbiddenError } from '../errors/app-error.js';
 import { hashApiKey } from './api-key.js';
+import { extractRawApiKey, rememberAuthenticatedKey } from './rate-limit-key.js';
 import { ApiKeyRepository } from '../../modules/tenants/infrastructure/api-key-repository.js';
 import { TenantRepository } from '../../modules/tenants/infrastructure/tenant-repository.js';
 import type { Tenant } from '../../infrastructure/database/schema/tenants.js';
@@ -36,16 +37,7 @@ const apiKeyRepo = new ApiKeyRepository();
 const tenantRepo = new TenantRepository();
 
 export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  const headerKey = request.headers['x-api-key'];
-  const authHeader = request.headers.authorization;
-
-  let rawKey: string | undefined;
-
-  if (typeof headerKey === 'string' && headerKey.trim().length > 0) {
-    rawKey = headerKey.trim();
-  } else if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    rawKey = authHeader.substring(7).trim();
-  }
+  const rawKey = extractRawApiKey(request.headers);
 
   if (!rawKey) {
     throw new UnauthorizedError('Credenciales ausentes. Debe proveer x-api-key o Authorization: Bearer <key>');
@@ -61,6 +53,7 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
       type: 'master',
       role: 'platform_admin'
     };
+    rememberAuthenticatedKey(rawKey);
 
     // Si el administrador de plataforma envía x-tenant-id para operar en nombre de un comercio:
     const impersonateTenantId = request.headers['x-tenant-id'];
@@ -86,6 +79,7 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
     throw new ForbiddenError('Esta API Key es de sólo lectura y no puede realizar operaciones de escritura');
   }
 
+  rememberAuthenticatedKey(rawKey);
   request.tenant = context.tenant;
   request.authContext = {
     type: 'api_key',
