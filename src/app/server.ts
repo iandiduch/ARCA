@@ -153,13 +153,16 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
     }
   });
 
-  await app.register(swaggerUi, {
-    routePrefix: '/documentation',
-    uiConfig: {
-      docExpansion: 'list',
-      deepLinking: true
-    }
-  });
+  const docsEnabled = config.DOCS_ENABLED ? config.DOCS_ENABLED === 'true' : config.NODE_ENV !== 'production';
+  if (docsEnabled) {
+    await app.register(swaggerUi, {
+      routePrefix: '/documentation',
+      uiConfig: {
+        docExpansion: 'list',
+        deepLinking: true
+      }
+    });
+  }
 
   // Rutas base
   await app.register(healthRoutes);
@@ -191,7 +194,7 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
       name: 'ARCA Fiscal API',
       version: '0.1.0',
       environment: config.ARCA_DEFAULT_ENVIRONMENT,
-      documentation: '/documentation',
+      documentation: docsEnabled ? '/documentation' : undefined,
       health: {
         liveness: '/health/live',
         readiness: '/health/ready'

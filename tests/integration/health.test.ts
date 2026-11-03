@@ -1,3 +1,4 @@
+import { loadConfig } from '../../src/app/config.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createApp } from '../../src/app/server.js';
@@ -43,9 +44,13 @@ describe('Endpoints de Diagnóstico y Salud (Health Routes)', () => {
   });
 
   it('GET /health/metrics debe responder 200 con telemetría de memoria, base de datos y uptime', async () => {
+    const anonymous = await app.inject({ method: 'GET', url: '/health/metrics' });
+    expect(anonymous.statusCode).toBe(401);
+
     const response = await app.inject({
       method: 'GET',
-      url: '/health/metrics'
+      url: '/health/metrics',
+      headers: { 'x-api-key': loadConfig().API_KEY_MASTER }
     });
 
     expect(response.statusCode).toBe(200);

@@ -27,6 +27,8 @@ export const envSchema = z.object({
   DATABASE_LOCK_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(10),
   // Espera máxima para obtener el turno de emisión de un punto de venta antes de responder 503
   FISCAL_LOCK_TIMEOUT_MS: z.coerce.number().int().min(100).default(30000),
+  // Swagger UI en /documentation. Por defecto deshabilitado en producción
+  DOCS_ENABLED: z.enum(['true', 'false']).optional(),
   // Envío de comprobantes por email (sin SMTP_HOST, en producción el endpoint responde 503)
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().default(587),

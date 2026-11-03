@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
 import { checkDatabaseConnection, getDatabasePoolStats } from '../../infrastructure/database/connection.js';
 import { TaxpayerService } from '../../modules/taxpayers/application/taxpayer-service.js';
+import { authenticate, requireMaster } from '../../core/security/auth-middleware.js';
 
 export const healthRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   // GET /health/live - Liveness Probe
@@ -79,9 +80,12 @@ export const healthRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     '/health/metrics',
     {
+      // Expone detalles internos (versión de Node, pool, memoria): sólo para la clave maestra
+      preHandler: [authenticate, requireMaster],
       schema: {
-        description: 'Métricas operativas del servidor, pool de base de datos y memoria',
+        description: 'Métricas operativas del servidor, pool de base de datos y memoria (requiere clave maestra)',
         tags: ['Health'],
+        security: [{ apiKeyAuth: [] }],
         response: {
           200: Type.Object({
             status: Type.Literal('ok'),

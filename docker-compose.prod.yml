@@ -56,6 +56,7 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       EMAIL_MAX_SENDS_PER_INVOICE: ${EMAIL_MAX_SENDS_PER_INVOICE:-5}
+      DOCS_ENABLED: ${DOCS_ENABLED:-false}
     expose:
       - "3000"
     healthcheck:
