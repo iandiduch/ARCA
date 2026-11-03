@@ -4,6 +4,8 @@ import type { FiscalIdentity } from '../../../infrastructure/database/schema/fis
 import { InvoicePdfService } from '../../documents/application/invoice-pdf-service.js';
 import { AuditService } from '../../audit/application/audit-service.js';
 import { logger } from '../../../app/logger.js';
+import { loadConfig } from '../../../app/config.js';
+import { AppError, ValidationError } from '../../../core/errors/app-error.js';
 
 export interface SendInvoiceEmailOptions {
   to: string;
@@ -20,18 +22,17 @@ export interface EmailSendResult {
 
 export class EmailService {
   private transporter: Transporter | null = null;
+  private readonly config = loadConfig();
 
   constructor() {
-    const smtpHost = process.env.SMTP_HOST;
-    if (smtpHost) {
+    if (this.config.SMTP_HOST) {
       this.transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: Number(process.env.SMTP_PORT ?? 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER ?? '',
-          pass: process.env.SMTP_PASS ?? ''
-        }
+        host: this.config.SMTP_HOST,
+        port: this.config.SMTP_PORT,
+        secure: this.config.SMTP_SECURE,
+        auth: this.config.SMTP_USER
+          ? { user: this.config.SMTP_USER, pass: this.config.SMTP_PASS ?? '' }
+          : undefined
       });
     }
   }
@@ -46,6 +47,35 @@ export class EmailService {
     options: SendInvoiceEmailOptions,
     userId?: string
   ): Promise<EmailSendResult> {
+    if (!this.transporter && this.config.NODE_ENV === 'production') {
+      throw new AppError(
+        'El envío de comprobantes por email no está configurado en este servidor (falta SMTP_HOST).',
+        503,
+        'EMAIL_NOT_CONFIGURED'
+      );
+    }
+
+    // Sólo comprobantes autorizados por ARCA: evita usar el endpoint para enviar contenido arbitrario
+    if (invoice.status !== 'AUTHORIZED') {
+      throw new ValidationError(
+        `Sólo se pueden enviar por email comprobantes autorizados por ARCA (estado actual: ${invoice.status})`
+      );
+    }
+
+    const sentLast24h = await AuditService.countRecentActions(
+      tenantId,
+      'INVOICE_EMAIL_SENT',
+      invoice.id,
+      new Date(Date.now() - 24 * 3600 * 1000)
+    );
+    if (sentLast24h >= this.config.EMAIL_MAX_SENDS_PER_INVOICE) {
+      throw new AppError(
+        `El comprobante ya fue enviado ${sentLast24h} veces en las últimas 24 horas (máximo ${this.config.EMAIL_MAX_SENDS_PER_INVOICE}).`,
+        429,
+        'EMAIL_SEND_LIMIT_EXCEEDED'
+      );
+    }
+
     const pdfBuffer = await InvoicePdfService.generatePdf(invoice, identity);
     const ptoVta = String(invoice.pointOfSaleNumber).padStart(5, '0');
     const nroComp = invoice.voucherNumber ? String(invoice.voucherNumber).padStart(8, '0') : 'BORRADOR';
@@ -61,7 +91,7 @@ export class EmailService {
 
     if (this.transporter) {
       const info = await this.transporter.sendMail({
-        from: process.env.SMTP_FROM ?? `no-reply@${identity.businessName.toLowerCase().replace(/\s+/g, '')}.com`,
+        from: this.config.SMTP_FROM ?? this.config.SMTP_USER,
         to: options.to,
         subject,
         text: textBody,

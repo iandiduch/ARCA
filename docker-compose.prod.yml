@@ -49,6 +49,13 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-1}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      EMAIL_MAX_SENDS_PER_INVOICE: ${EMAIL_MAX_SENDS_PER_INVOICE:-5}
     expose:
       - "3000"
     healthcheck:

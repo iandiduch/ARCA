@@ -21,8 +21,25 @@ export const envSchema = z.object({
   // Pool separado para los bloqueos de secuencia fiscal / WSAA: no compite con las consultas normales
   DATABASE_LOCK_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(10),
   // Espera máxima para obtener el turno de emisión de un punto de venta antes de responder 503
-  FISCAL_LOCK_TIMEOUT_MS: z.coerce.number().int().min(100).default(30000)
+  FISCAL_LOCK_TIMEOUT_MS: z.coerce.number().int().min(100).default(30000),
+  // Envío de comprobantes por email (sin SMTP_HOST, en producción el endpoint responde 503)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().default(587),
+  SMTP_SECURE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  // Máximo de envíos del mismo comprobante en 24 h (evita usar la API como relay de spam)
+  EMAIL_MAX_SENDS_PER_INVOICE: z.coerce.number().int().min(1).default(5)
 }).superRefine((data, ctx) => {
+  if (data.SMTP_HOST && !data.SMTP_FROM && !data.SMTP_USER) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['SMTP_FROM'],
+      message: 'Con SMTP_HOST configurado se requiere SMTP_FROM (o SMTP_USER) como remitente.'
+    });
+  }
+
   if (data.NODE_ENV === 'production') {
     if (data.API_KEY_MASTER === 'dev-master-secret-key-change-in-production') {
       ctx.addIssue({
