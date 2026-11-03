@@ -38,7 +38,7 @@ Diseñada bajo principios de **Clean Architecture**, alta concurrencia, resilien
 * **Reconciliación Automática:** Endpoint `reconcile` que consulta `FECompConsultar` para recuperar el CAE de comprobantes pendientes tras caídas temporales de red.
 
 ### 🏢 Multi-Tenancy y Seguridad
-* **Aislamiento Estricto por Comercio:** Cada comercio opera con sus propias API Keys sha256, roles (`admin`, `seller`), identidades fiscales y puntos de venta.
+* **Aislamiento Estricto por Comercio:** Cada comercio opera con sus propias API Keys sha256, roles (`admin`: además gestiona API Keys del comercio; `pos_client`: operación fiscal y comercial; `read_only`: sólo lectura), identidades fiscales y puntos de venta.
 * **Clave Maestra de Plataforma:** Administración global protegida contra *Timing Attacks* mediante `crypto.timingSafeEqual`.
 * **Rate Limiting:** Limitador de tasa configurable por IP y comercio.
 * **CORS Configurable:** Restricción estricta de dominios para entornos de producción.

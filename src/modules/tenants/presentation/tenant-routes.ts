@@ -1,7 +1,7 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
 import { TenantService } from '../application/tenant-service.js';
-import { authenticate, requireMaster, requireTenant } from '../../../core/security/auth-middleware.js';
+import { authenticate, requireKeyAdmin, requireMaster, requireTenant } from '../../../core/security/auth-middleware.js';
 import { ForbiddenError } from '../../../core/errors/app-error.js';
 
 export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
@@ -122,7 +122,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.post(
     '/api/v1/tenants/:tenantId/api-keys',
     {
-      preHandler: [authenticate],
+      preHandler: [authenticate, requireKeyAdmin],
       schema: {
         description: 'Genera una nueva API Key para que un sistema POS consuma la API fiscal',
         tags: ['Tenants'],
@@ -132,7 +132,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         }),
         body: Type.Object({
           name: Type.String({ minLength: 2, description: 'Etiqueta o nombre del POS (ej: Onion POS Caja 1)' }),
-          role: Type.Optional(Type.String({ default: 'pos_client' })),
+          role: Type.Optional(Type.Union([Type.Literal('admin'), Type.Literal('pos_client'), Type.Literal('read_only')], { default: 'pos_client', description: 'admin | pos_client | read_only' })),
           environment: Type.Optional(Type.Union([Type.Literal('live'), Type.Literal('test')]))
         }),
         response: {
@@ -178,7 +178,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     '/api/v1/tenants/:tenantId/api-keys',
     {
-      preHandler: [authenticate],
+      preHandler: [authenticate, requireKeyAdmin],
       schema: {
         description: 'Lista las API Keys del comercio (sin exponer los secretos)',
         tags: ['Tenants'],
@@ -226,7 +226,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.delete(
     '/api/v1/tenants/:tenantId/api-keys/:keyId',
     {
-      preHandler: [authenticate],
+      preHandler: [authenticate, requireKeyAdmin],
       schema: {
         description: 'Revoca inmediatamente una API Key activa de un comercio',
         tags: ['Tenants'],
