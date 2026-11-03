@@ -20,6 +20,16 @@ export interface WsfeClientOptions {
   timeoutMs?: number | undefined;
 }
 
+/**
+ * Oculta el Token y Sign de WSAA de un XML SOAP antes de persistirlo o devolverlo por la API:
+ * son credenciales válidas ante ARCA por ~12 h para el CUIT del comercio.
+ */
+export function redactWsaaCredentials(xml: string): string {
+  return xml
+    .replace(/<fev:Token>[^<]*<\/fev:Token>/g, '<fev:Token>[REDACTED]</fev:Token>')
+    .replace(/<fev:Sign>[^<]*<\/fev:Sign>/g, '<fev:Sign>[REDACTED]</fev:Sign>');
+}
+
 export class Wsfev1Client {
   private static readonly ENDPOINTS = {
     homologation: 'https://wswhomo.afip.gob.ar/wsfev1/service.asmx',
@@ -380,7 +390,7 @@ export class Wsfev1Client {
       observaciones,
       errores,
       eventos,
-      xmlRequest: soapBody,
+      xmlRequest: redactWsaaCredentials(soapBody),
       xmlResponse
     };
   }

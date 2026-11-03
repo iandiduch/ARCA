@@ -43,6 +43,13 @@
       "when": 1793067511779,
       "tag": "0005_modern_amphibian",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793745978631,
+      "tag": "0006_redact_wsaa_credentials",
+      "breakpoints": true
     }
   ]
 }
