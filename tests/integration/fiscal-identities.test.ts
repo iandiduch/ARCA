@@ -189,6 +189,58 @@ describe('Identidades Fiscales y Asistente ARCA (Fase 4)', () => {
     expect(statusRes.json().hasCertificate).toBe(true);
   });
 
+  it('4b. RENOVACIÓN: generar un nuevo CSR no desactiva el certificado vigente hasta cargar el nuevo', async () => {
+    const db = getDatabase();
+    const before = await db.select().from(fiscalCertificates).where(eq(fiscalCertificates.fiscalIdentityId, identityAId));
+    const currentCert = before.find((c) => c.active && c.certificate);
+    expect(currentCert).toBeDefined();
+
+    const resCsr = await app.inject({
+      method: 'POST',
+      url: `/api/v1/fiscal-identities/${identityAId}/certificate-requests`,
+      headers: { 'x-api-key': tenantAKey }
+    });
+    expect(resCsr.statusCode).toBe(201);
+
+    // El certificado vigente sigue activo durante la renovación
+    const statusDuring = await app.inject({
+      method: 'GET',
+      url: `/api/v1/fiscal-identities/${identityAId}/status`,
+      headers: { 'x-api-key': tenantAKey }
+    });
+    expect(statusDuring.json().hasCertificate).toBe(true);
+    const [stillActive] = await db.select().from(fiscalCertificates).where(eq(fiscalCertificates.id, currentCert!.id));
+    expect(stillActive!.active).toBe(true);
+
+    // Cargar el certificado de la nueva solicitud lo convierte en el único activo
+    const rows = await db.select().from(fiscalCertificates).where(eq(fiscalCertificates.fiscalIdentityId, identityAId));
+    const pending = rows.find((c) => !c.certificate)!;
+    const privateKey = forge.pki.privateKeyFromPem(
+      EncryptionService.decrypt({ ciphertext: pending.encryptedPrivateKey, iv: pending.privateKeyIv, authTag: pending.privateKeyAuthTag })
+    );
+    const renewed = forge.pki.createCertificate();
+    renewed.publicKey = forge.pki.setRsaPublicKey(privateKey.n, privateKey.e);
+    renewed.serialNumber = '1002';
+    renewed.validity.notBefore = new Date(Date.now() - 3600000);
+    renewed.validity.notAfter = new Date(Date.now() + 2 * 365 * 24 * 3600000);
+    renewed.setSubject([{ name: 'commonName', value: 'computador1' }]);
+    renewed.sign(privateKey, forge.md.sha256.create());
+
+    const resUpload = await app.inject({
+      method: 'POST',
+      url: `/api/v1/fiscal-identities/${identityAId}/certificates`,
+      headers: { 'x-api-key': tenantAKey },
+      payload: { certificatePem: forge.pki.certificateToPem(renewed) }
+    });
+    expect(resUpload.statusCode).toBe(200);
+
+    const after = await db.select().from(fiscalCertificates).where(eq(fiscalCertificates.fiscalIdentityId, identityAId));
+    const activeAfter = after.filter((c) => c.active);
+    expect(activeAfter).toHaveLength(1);
+    expect(activeAfter[0]!.id).toBe(pending.id);
+    expect(activeAfter[0]!.certificate).toContain('BEGIN CERTIFICATE');
+  });
+
   it('5. AISLAMIENTO: Comercio B NO puede acceder ni operar sobre identidades del Comercio A', async () => {
     // Comercio B intenta consultar el estado
     const resGet = await app.inject({

@@ -140,19 +140,29 @@ export class FiscalIdentityService {
     // Cifrar la clave privada en reposo con AES-256-GCM
     const encryptedKey = EncryptionService.encrypt(privateKeyPem);
 
+    // La solicitud se guarda inactiva: si es una renovación, el certificado vigente sigue firmando
+    // hasta que se cargue el nuevo certificado emitido por ARCA.
     await this.repo.saveCertificate({
       fiscalIdentityId: identity.id,
       encryptedPrivateKey: encryptedKey.ciphertext,
       privateKeyIv: encryptedKey.iv,
       privateKeyAuthTag: encryptedKey.authTag,
       csr: csrPem,
-      active: true
+      active: false
     });
 
-    await this.repo.update(tenantId, identity.id, {
-      status: 'CERTIFICATE_PENDING',
-      statusReason: 'CSR generado. Descargue el archivo y tramítelo en el portal de ARCA.'
-    });
+    const currentCert = await this.repo.getActiveCertificate(identity.id);
+    if (currentCert) {
+      await this.repo.update(tenantId, identity.id, {
+        statusReason:
+          'Renovación en curso: CSR generado. El certificado vigente se sigue usando hasta cargar el nuevo emitido por ARCA.'
+      });
+    } else {
+      await this.repo.update(tenantId, identity.id, {
+        status: 'CERTIFICATE_PENDING',
+        statusReason: 'CSR generado. Descargue el archivo y tramítelo en el portal de ARCA.'
+      });
+    }
 
     await AuditService.record({
       tenantId,
@@ -183,21 +193,23 @@ export class FiscalIdentityService {
     userId?: string
   ) {
     const identity = await this.getIdentityById(tenantId, identityId);
-    const certRecord = await this.repo.getActiveCertificate(identity.id);
+    const pendingRequests = await this.repo.getPendingCertificateRequests(identity.id);
 
-    if (!certRecord) {
+    if (pendingRequests.length === 0) {
       throw new ValidationError('No existe una solicitud de certificado previa para este comercio');
     }
 
-    // Desencriptar la clave privada almacenada para verificar la correspondencia
-    const privateKeyPem = EncryptionService.decrypt({
-      ciphertext: certRecord.encryptedPrivateKey,
-      iv: certRecord.privateKeyIv,
-      authTag: certRecord.privateKeyAuthTag
+    // Buscar la solicitud CSR cuya clave privada corresponde al certificado cargado
+    const certRecord = pendingRequests.find((req) => {
+      const privateKeyPem = EncryptionService.decrypt({
+        ciphertext: req.encryptedPrivateKey,
+        iv: req.privateKeyIv,
+        authTag: req.privateKeyAuthTag
+      });
+      return CertificateManager.matchKeyAndCert(privateKeyPem, certPem);
     });
 
-    const isMatch = CertificateManager.matchKeyAndCert(privateKeyPem, certPem);
-    if (!isMatch) {
+    if (!certRecord) {
       throw new ValidationError(
         'El certificado público cargado no corresponde a la clave privada generada para este comercio'
       );
@@ -208,17 +220,11 @@ export class FiscalIdentityService {
       throw new ValidationError(`El certificado ya se encuentra vencido (expiró el ${metadata.validTo.toISOString()})`);
     }
 
-    await this.repo.saveCertificate({
-      fiscalIdentityId: identity.id,
-      encryptedPrivateKey: certRecord.encryptedPrivateKey,
-      privateKeyIv: certRecord.privateKeyIv,
-      privateKeyAuthTag: certRecord.privateKeyAuthTag,
-      csr: certRecord.csr,
+    await this.repo.activateCertificate(identity.id, certRecord.id, {
       certificate: certPem,
       certificateFingerprint: metadata.fingerprint,
       validFrom: metadata.validFrom,
-      validTo: metadata.validTo,
-      active: true
+      validTo: metadata.validTo
     });
 
     await this.repo.update(tenantId, identity.id, {
