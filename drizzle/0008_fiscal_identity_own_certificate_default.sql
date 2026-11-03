@@ -1,0 +1,1 @@
+ALTER TABLE "fiscal_identities" ALTER COLUMN "connection_type" SET DEFAULT 'OWN_CERTIFICATE';

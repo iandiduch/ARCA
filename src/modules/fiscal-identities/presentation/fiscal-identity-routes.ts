@@ -61,7 +61,10 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
           grossIncomeNumber: Type.Optional(Type.String()),
           activityStartDate: Type.Optional(Type.String()),
           connectionType: Type.Optional(
-            Type.Union([Type.Literal('DELEGATION'), Type.Literal('OWN_CERTIFICATE')], { default: 'DELEGATION' })
+            Type.Union([Type.Literal('DELEGATION'), Type.Literal('OWN_CERTIFICATE')], {
+              default: 'OWN_CERTIFICATE',
+              description: 'OWN_CERTIFICATE: el comercio usa su propio certificado. DELEGATION todavía no está soportado.'
+            })
           )
         }),
         response: {

@@ -269,6 +269,21 @@ describe('Identidades Fiscales y Asistente ARCA (Fase 4)', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it('6b. El modo DELEGATION se rechaza explícitamente (no está soportado)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/fiscal-identities',
+      headers: { 'x-api-key': tenantAKey },
+      payload: {
+        cuit: '30712345671',
+        businessName: 'Comercio Delegado SRL',
+        connectionType: 'DELEGATION'
+      }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toContain('DELEGATION');
+  });
+
   it('7. Eliminar una identidad fiscal sin comprobantes emitidos', async () => {
     const createRes = await app.inject({
       method: 'POST',

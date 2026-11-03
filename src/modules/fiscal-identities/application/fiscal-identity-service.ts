@@ -39,7 +39,15 @@ export class FiscalIdentityService {
     }
 
     const environment = input.environment ?? 'homologation';
-    const connectionType = input.connectionType ?? 'DELEGATION';
+    const connectionType = input.connectionType ?? 'OWN_CERTIFICATE';
+
+    // La emisión siempre firma con el certificado propio de la identidad: la delegación del servicio
+    // al CUIT de la plataforma (certificado de plataforma + Cuit representado) no está implementada.
+    if (connectionType === 'DELEGATION') {
+      throw new ValidationError(
+        'El modo DELEGATION (delegar el web service al CUIT de la plataforma) todavía no está soportado. Use connectionType OWN_CERTIFICATE y cargue el certificado del comercio.'
+      );
+    }
 
     const existing = await this.repo.findByCuit(tenantId, cleanCuit, environment);
     if (existing) {
@@ -48,11 +56,8 @@ export class FiscalIdentityService {
       );
     }
 
-    const initialStatus = connectionType === 'DELEGATION' ? 'AUTHORIZATION_PENDING' : 'IDENTITY_PENDING';
-    const statusReason =
-      connectionType === 'DELEGATION'
-        ? 'Pendiente de delegación del servicio en el portal de ARCA al CUIT de la plataforma'
-        : 'Pendiente de generación de solicitud de certificado digital (CSR)';
+    const initialStatus = 'IDENTITY_PENDING';
+    const statusReason = 'Pendiente de generación de solicitud de certificado digital (CSR)';
 
     const identity = await this.repo.create({
       tenantId,

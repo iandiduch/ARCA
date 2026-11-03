@@ -16,7 +16,7 @@ export const fiscalIdentities = pgTable(
     taxCondition: text('tax_condition').default('RESPONSABLE_MONOTRIBUTO').notNull(),
     grossIncomeNumber: text('gross_income_number'), // Ingresos Brutos
     activityStartDate: text('activity_start_date'), // YYYY-MM-DD
-    connectionType: text('connection_type').default('DELEGATION').notNull(), // 'DELEGATION' | 'OWN_CERTIFICATE'
+    connectionType: text('connection_type').default('OWN_CERTIFICATE').notNull(), // 'OWN_CERTIFICATE' ('DELEGATION' aún no soportado)
     status: text('status').default('NOT_STARTED').notNull(),
     statusReason: text('status_reason'),
     lastValidatedAt: timestamp('last_validated_at', { withTimezone: true }),

@@ -57,6 +57,13 @@
       "when": 1793748444896,
       "tag": "0007_idempotency_request_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793749896380,
+      "tag": "0008_fiscal_identity_own_certificate_default",
+      "breakpoints": true
     }
   ]
 }
