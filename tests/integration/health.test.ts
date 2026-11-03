@@ -83,4 +83,14 @@ describe('Endpoints de Diagnóstico y Salud (Health Routes)', () => {
 
     expect(response.statusCode).toBe(404);
   });
+
+  it('CORS con origen comodín no habilita credenciales', async () => {
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: '/api/v1/invoices',
+      headers: { origin: 'https://sitio-malicioso.example', 'access-control-request-method': 'POST' }
+    });
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+  });
 });

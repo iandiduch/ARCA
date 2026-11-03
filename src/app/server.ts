@@ -93,11 +93,12 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
     ? true
     : config.CORS_ORIGIN.split(',').map(parseCorsOrigin);
 
+  // La API se autentica por cabecera (x-api-key / Bearer), no por cookies: nunca se habilitan credenciales
+  // con un origen comodín, que permitiría a cualquier sitio leer respuestas con la sesión del navegador.
+  const wildcardCors = config.CORS_ORIGIN === '*';
   await app.register(cors, {
-    origin: config.NODE_ENV === 'production' && config.CORS_ORIGIN !== '*'
-      ? allowedOrigins
-      : true,
-    credentials: true,
+    origin: wildcardCors ? '*' : allowedOrigins,
+    credentials: !wildcardCors,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
   });
 

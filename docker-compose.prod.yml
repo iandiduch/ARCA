@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-arca_db}
       POSTGRES_USER: ${POSTGRES_USER:-arca_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arca_secure_password_change_me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
     expose:
       - "5432"
     volumes:
@@ -35,14 +35,14 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOST: 0.0.0.0
-      DATABASE_URL: postgres://${POSTGRES_USER:-arca_user}:${POSTGRES_PASSWORD:-arca_secure_password_change_me}@postgres:5432/${POSTGRES_DB:-arca_db}
+      DATABASE_URL: postgres://${POSTGRES_USER:-arca_user}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-arca_db}
       DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-20}
       DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-10000}
       DATABASE_LOCK_MAX_CONNECTIONS: ${DATABASE_LOCK_MAX_CONNECTIONS:-10}
       FISCAL_LOCK_TIMEOUT_MS: ${FISCAL_LOCK_TIMEOUT_MS:-30000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      API_KEY_MASTER: ${API_KEY_MASTER}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      API_KEY_MASTER: ${API_KEY_MASTER:?Defina API_KEY_MASTER (openssl rand -hex 32)}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Defina ENCRYPTION_KEY (openssl rand -hex 32)}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       ARCA_DEFAULT_ENVIRONMENT: ${ARCA_DEFAULT_ENVIRONMENT:-production}
       ARCA_PLATFORM_CUIT: ${ARCA_PLATFORM_CUIT}
