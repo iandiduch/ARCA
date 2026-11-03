@@ -211,7 +211,9 @@ describe('Conciliación de comprobantes interrumpidos y numeración fiscal', () 
       observaciones: [],
       errores: []
     });
+    // Vitest 5 reutiliza el espía existente: limpiar la llamada del intento interrumpido
     const solicitarSpy = vi.spyOn(Wsfev1Client, 'solicitarCae');
+    solicitarSpy.mockClear();
 
     const resRetry = await emit({ 'x-idempotency-key': 'venta-0001' });
     expect(resRetry.statusCode).toBe(201);

@@ -70,7 +70,7 @@ export function loadConfig(): AppConfig {
 
   const result = envSchema.safeParse(process.env);
   if (!result.success) {
-    const errorDetails = result.error.errors
+    const errorDetails = result.error.issues
       .map((e) => `[${e.path.join('.')}] ${e.message}`)
       .join(', ');
     throw new Error(`Configuración de entorno inválida: ${errorDetails}`);
