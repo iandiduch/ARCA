@@ -7,6 +7,7 @@ const { Pool } = pg;
 const config = loadConfig();
 
 let pool: pg.Pool | null = null;
+let lockPool: pg.Pool | null = null;
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
 export function getDatabasePool(): pg.Pool {
@@ -26,6 +27,28 @@ export function getDatabasePool(): pg.Pool {
   }
 
   return pool;
+}
+
+/**
+ * Pool dedicado a bloqueos consultivos (pg_advisory_lock). Cada bloqueo retiene su conexión mientras dura,
+ * así que se aísla del pool principal para no agotarlo durante llamadas lentas a ARCA.
+ */
+export function getLockPool(): pg.Pool {
+  if (!lockPool) {
+    lockPool = new Pool({
+      connectionString: config.DATABASE_URL,
+      max: config.DATABASE_LOCK_MAX_CONNECTIONS,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: config.FISCAL_LOCK_TIMEOUT_MS,
+      statement_timeout: config.DATABASE_STATEMENT_TIMEOUT_MS
+    });
+
+    lockPool.on('error', (err) => {
+      logger.error({ err }, 'Error inesperado en el pool de bloqueos de PostgreSQL');
+    });
+  }
+
+  return lockPool;
 }
 
 export function getDatabase() {
@@ -70,6 +93,10 @@ export function getDatabasePoolStats(): { total: number; idle: number; waiting: 
 }
 
 export async function closeDatabaseConnection(): Promise<void> {
+  if (lockPool) {
+    await lockPool.end();
+    lockPool = null;
+  }
   if (pool) {
     await pool.end();
     pool = null;

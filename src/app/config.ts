@@ -15,7 +15,11 @@ export const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().default(300),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
   CORS_ORIGIN: z.string().default('*'),
-  DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().default(10000)
+  DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().default(10000),
+  // Pool separado para los bloqueos de secuencia fiscal / WSAA: no compite con las consultas normales
+  DATABASE_LOCK_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(10),
+  // Espera máxima para obtener el turno de emisión de un punto de venta antes de responder 503
+  FISCAL_LOCK_TIMEOUT_MS: z.coerce.number().int().min(100).default(30000)
 }).superRefine((data, ctx) => {
   if (data.NODE_ENV === 'production') {
     if (data.API_KEY_MASTER === 'dev-master-secret-key-change-in-production') {
