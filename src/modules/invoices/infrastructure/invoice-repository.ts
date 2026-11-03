@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, gte, lte } from 'drizzle-orm';
+import { eq, and, asc, desc, sql, gte, lte, inArray, isNotNull } from 'drizzle-orm';
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import {
   invoices,
@@ -176,6 +176,66 @@ export class InvoiceRepository {
       data,
       total: countResult?.count ?? 0
     };
+  }
+
+  /**
+   * Comprobantes con numeración asignada cuyo resultado en ARCA es desconocido (PENDING / PENDING_RECONCILIATION)
+   * para una secuencia fiscal (identidad + punto de venta + tipo).
+   */
+  public async findUnresolvedInSequence(
+    fiscalIdentityId: string,
+    pointOfSaleNumber: number,
+    voucherType: number,
+    limit = 10
+  ): Promise<Invoice[]> {
+    const db = getDatabase();
+    return db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.fiscalIdentityId, fiscalIdentityId),
+          eq(invoices.pointOfSaleNumber, pointOfSaleNumber),
+          eq(invoices.voucherType, voucherType),
+          inArray(invoices.status, ['PENDING', 'PENDING_RECONCILIATION']),
+          isNotNull(invoices.voucherNumber)
+        )
+      )
+      .orderBy(asc(invoices.voucherNumber))
+      .limit(limit);
+  }
+
+  public async findLatestByIdempotencyKey(tenantId: string, idempotencyKey: string): Promise<Invoice | null> {
+    const db = getDatabase();
+    const [found] = await db
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.tenantId, tenantId), eq(invoices.idempotencyKey, idempotencyKey)))
+      .orderBy(desc(invoices.createdAt))
+      .limit(1);
+    return found ?? null;
+  }
+
+  public async findBySequenceNumber(
+    fiscalIdentityId: string,
+    pointOfSaleNumber: number,
+    voucherType: number,
+    voucherNumber: number
+  ): Promise<Invoice | null> {
+    const db = getDatabase();
+    const [found] = await db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.fiscalIdentityId, fiscalIdentityId),
+          eq(invoices.pointOfSaleNumber, pointOfSaleNumber),
+          eq(invoices.voucherType, voucherType),
+          eq(invoices.voucherNumber, voucherNumber)
+        )
+      )
+      .limit(1);
+    return found ?? null;
   }
 
   public async findPendingReconciliation(tenantId: string): Promise<FullInvoice[]> {
