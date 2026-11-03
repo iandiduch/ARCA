@@ -174,7 +174,9 @@ export class InvoiceService {
   ): Promise<FullInvoice> {
     // 1. Control estricto de Idempotencia si el cliente envió idempotencyKey
     if (input.idempotencyKey) {
-      let idemp = await IdempotencyService.acquire(tenantId, input.idempotencyKey, 'invoices');
+      const { idempotencyKey: _key, ...fingerprintPayload } = input;
+      const idempOptions = { requestHash: IdempotencyService.hashPayload(fingerprintPayload) };
+      let idemp = await IdempotencyService.acquire(tenantId, input.idempotencyKey, 'invoices', idempOptions);
       if (idemp.state === 'IN_PROGRESS') {
         // Reintento del POS tras una emisión interrumpida: conciliar primero con ARCA.
         // Si ARCA la autorizó se devuelve esa factura; si nunca llegó, la clave se libera y se emite de nuevo.
@@ -187,11 +189,11 @@ export class InvoiceService {
           if (resolved.status === 'AUTHORIZED') {
             return resolved;
           }
-          idemp = await IdempotencyService.acquire(tenantId, input.idempotencyKey, 'invoices');
+          idemp = await IdempotencyService.acquire(tenantId, input.idempotencyKey, 'invoices', idempOptions);
         }
       }
       if (idemp.state === 'IN_PROGRESS') {
-        idemp = await IdempotencyService.waitForCompletion(tenantId, input.idempotencyKey);
+        idemp = await IdempotencyService.waitForCompletion(tenantId, input.idempotencyKey, idempOptions);
       }
       if (idemp.state === 'IN_PROGRESS') {
         throw new ConflictError(

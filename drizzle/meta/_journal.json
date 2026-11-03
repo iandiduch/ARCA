@@ -50,6 +50,13 @@
       "when": 1793745978631,
       "tag": "0006_redact_wsaa_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793748444896,
+      "tag": "0007_idempotency_request_hash",
+      "breakpoints": true
     }
   ]
 }

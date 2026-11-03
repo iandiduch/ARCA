@@ -13,6 +13,7 @@ export const idempotencyKeys = pgTable(
     status: text('status').notNull(), // 'PROCESSING', 'COMPLETED', 'FAILED'
     statusCode: integer('status_code'),
     responseBody: jsonb('response_body'),
+    requestHash: text('request_hash'), // sha256 del payload; detecta reutilización de la clave con otro contenido
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
   },
