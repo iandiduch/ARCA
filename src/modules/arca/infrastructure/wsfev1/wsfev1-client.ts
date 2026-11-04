@@ -225,7 +225,8 @@ export class Wsfev1Client {
       nro: Number(p.Nro ?? 0),
       emisionTipo: String(p.EmisionTipo ?? ''),
       bloqueado: String(p.Bloqueado ?? '').toUpperCase() === 'S',
-      fchBaja: p.FchBaja ? String(p.FchBaja) : undefined
+      // ARCA informa "NULL" cuando el punto de venta no fue dado de baja
+      fchBaja: p.FchBaja && String(p.FchBaja).toUpperCase() !== 'NULL' ? String(p.FchBaja) : undefined
     }));
   }
 

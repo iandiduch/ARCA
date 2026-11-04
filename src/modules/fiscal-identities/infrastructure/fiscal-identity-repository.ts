@@ -174,12 +174,11 @@ export class FiscalIdentityRepository {
     const db = getDatabase();
     if (ptos.length === 0) return [];
 
-    // Desactivar previos o insertar
-    await db
-      .delete(pointsOfSale)
-      .where(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId));
-
-    return db.insert(pointsOfSale).values(ptos).returning();
+    // Reemplazo atómico: si el insert falla no se pierden los puntos de venta anteriores
+    return db.transaction(async (tx) => {
+      await tx.delete(pointsOfSale).where(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId));
+      return tx.insert(pointsOfSale).values(ptos).returning();
+    });
   }
 
   public async getPointsOfSale(fiscalIdentityId: string): Promise<PointOfSale[]> {

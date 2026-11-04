@@ -331,7 +331,7 @@ export class FiscalIdentityService {
             number: p.nro,
             type: p.emisionTipo,
             description: `Punto de Venta ${p.nro} (${p.emisionTipo})`,
-            active: !p.bloqueado
+            active: !p.bloqueado && !p.fchBaja
           }))
         );
       }

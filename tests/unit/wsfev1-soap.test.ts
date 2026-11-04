@@ -22,4 +22,12 @@ describe('WSFEv1: manejo de SOAP Fault', () => {
     expect(xmlEscape(`a<b>&"c'`)).toBe('a&lt;b&gt;&amp;&quot;c&apos;');
     expect(xmlEscape(20301234567)).toBe('20301234567');
   });
+
+  it('interpreta FchBaja "NULL" como punto de venta vigente', async () => {
+    const xml = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><FEParamGetPtosVentaResponse xmlns="http://ar.gov.afip.dif.FEV1/"><FEParamGetPtosVentaResult><ResultGet><PtoVenta><Nro>1</Nro><EmisionTipo>CAE - RECE</EmisionTipo><Bloqueado>N</Bloqueado><FchBaja>NULL</FchBaja></PtoVenta><PtoVenta><Nro>2</Nro><EmisionTipo>CAE - RECE</EmisionTipo><Bloqueado>N</Bloqueado><FchBaja>20250101</FchBaja></PtoVenta></ResultGet></FEParamGetPtosVentaResult></FEParamGetPtosVentaResponse></soap:Body></soap:Envelope>`;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(xml, { status: 200 }));
+    const ptos = await Wsfev1Client.getPuntosVenta({ token: 't', sign: 's', cuit: '20301234567' });
+    expect(ptos[0]!.fchBaja).toBeUndefined();
+    expect(ptos[1]!.fchBaja).toBe('20250101');
+  });
 });
