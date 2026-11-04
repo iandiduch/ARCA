@@ -1,5 +1,8 @@
 import forge from 'node-forge';
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
+
+const generateKeyPairAsync = promisify(crypto.generateKeyPair);
 
 export interface GeneratedKeyAndCsr {
   privateKeyPem: string;
@@ -21,14 +24,22 @@ export class CertificateManager {
    * Genera un par de claves RSA de 2048 bits y una Solicitud de Certificado (CSR PKCS#10)
    * formateada según las especificaciones de ARCA/AFIP.
    */
-  public static generateKeyPairAndCsr(
+  public static async generateKeyPairAndCsr(
     cuit: string,
     businessName: string,
     commonName = 'ARCA_POS_SERVICE'
-  ): GeneratedKeyAndCsr {
-    // 1. Generación de clave RSA 2048
-    const keys = forge.pki.rsa.generateKeyPair({ bits: 2048, workers: -1 });
-    const privateKeyPem = forge.pki.privateKeyToPem(keys.privateKey);
+  ): Promise<GeneratedKeyAndCsr> {
+    // 1. Generación de clave RSA 2048 con el crypto nativo en el threadpool de libuv
+    // (forge en Node la genera de forma síncrona y bloquea el event loop varios segundos)
+    const { privateKey: privateKeyPem, publicKey: publicKeyPem } = await generateKeyPairAsync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs1', format: 'pem' }
+    });
+    const keys = {
+      privateKey: forge.pki.privateKeyFromPem(privateKeyPem),
+      publicKey: forge.pki.publicKeyFromPem(publicKeyPem)
+    };
 
     // 2. Creación del CSR (PKCS#10)
     const csr = forge.pki.createCertificationRequest();

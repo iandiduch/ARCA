@@ -137,7 +137,7 @@ export class FiscalIdentityService {
   public async generateCertificateRequest(tenantId: string, identityId: string, userId?: string) {
     const identity = await this.getIdentityById(tenantId, identityId);
 
-    const { privateKeyPem, csrPem } = CertificateManager.generateKeyPairAndCsr(
+    const { privateKeyPem, csrPem } = await CertificateManager.generateKeyPairAndCsr(
       identity.cuit,
       identity.businessName
     );
