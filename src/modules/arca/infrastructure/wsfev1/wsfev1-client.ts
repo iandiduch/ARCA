@@ -30,6 +30,17 @@ export function redactWsaaCredentials(xml: string): string {
     .replace(/<fev:Sign>[^<]*<\/fev:Sign>/g, '<fev:Sign>[REDACTED]</fev:Sign>');
 }
 
+/**
+ * Devuelve el faultstring de un SOAP Fault (ARCA los responde con HTTP 500), o undefined si no hay fault.
+ */
+export function extractSoapFault(xml: string): string | undefined {
+  if (!/<(\w+:)?Fault[\s>]/.test(xml)) return undefined;
+  const parsed = new XMLParser({ removeNSPrefix: true }).parse(xml);
+  const fault = parsed?.Envelope?.Body?.Fault;
+  if (!fault) return undefined;
+  return String(fault.faultstring ?? fault.faultcode ?? 'SOAP Fault sin detalle');
+}
+
 export class Wsfev1Client {
   private static readonly ENDPOINTS = {
     homologation: 'https://wswhomo.afip.gob.ar/wsfev1/service.asmx',
@@ -518,7 +529,12 @@ export class Wsfev1Client {
 
       const responseText = await res.text();
 
-      if (!res.ok && !responseText.includes('<soap:Fault>') && !responseText.includes('<faultstring>')) {
+      const faultMessage = extractSoapFault(responseText);
+      if (faultMessage) {
+        throw new InfrastructureError(`WSFEv1 devolvió un error SOAP: ${faultMessage}`, 'ARCA_SOAP_FAULT');
+      }
+
+      if (!res.ok) {
         throw new InfrastructureError(`WSFEv1 respondió con HTTP ${res.status}: ${res.statusText}`);
       }
 
