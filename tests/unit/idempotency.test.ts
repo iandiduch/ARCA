@@ -4,6 +4,7 @@ import { IdempotencyService } from '../../src/core/security/idempotency-service.
 import { getDatabase } from '../../src/infrastructure/database/connection.js';
 import { tenants } from '../../src/infrastructure/database/schema/tenants.js';
 import { idempotencyKeys } from '../../src/infrastructure/database/schema/idempotency-keys.js';
+import { invoices } from '../../src/infrastructure/database/schema/invoices.js';
 
 describe('IdempotencyService — Control de Concurrencia y Caché Idempotente', () => {
   let tenantId: string;
@@ -11,6 +12,7 @@ describe('IdempotencyService — Control de Concurrencia y Caché Idempotente', 
   beforeEach(async () => {
     const db = getDatabase();
     await db.delete(idempotencyKeys);
+    await db.delete(invoices);
     await db.delete(tenants);
 
     const [t] = await db

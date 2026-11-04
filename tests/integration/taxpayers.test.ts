@@ -7,6 +7,7 @@ import { tenants } from '../../src/infrastructure/database/schema/tenants.js';
 import { apiKeys } from '../../src/infrastructure/database/schema/api-keys.js';
 import { fiscalIdentities } from '../../src/infrastructure/database/schema/fiscal-identities.js';
 import { fiscalCertificates } from '../../src/infrastructure/database/schema/fiscal-certificates.js';
+import { invoices } from '../../src/infrastructure/database/schema/invoices.js';
 import { generateApiKey } from '../../src/core/security/api-key.js';
 import { EncryptionService } from '../../src/core/security/encryption.js';
 import { WsaaClient } from '../../src/modules/arca/infrastructure/wsaa/wsaa-client.js';
@@ -24,6 +25,7 @@ describe('Padrón de Contribuyentes ARCA (Fase 7)', () => {
     app = await createApp({ enableLogging: false });
     const db = getDatabase();
 
+    await db.delete(invoices);
     await db.delete(fiscalCertificates);
     await db.delete(fiscalIdentities);
     await db.delete(apiKeys);

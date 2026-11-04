@@ -360,5 +360,11 @@ describe('Conciliación de comprobantes interrumpidos y numeración fiscal', () 
     const resCf = await emit({}, { customer: { docType: 99, docNumber: '20301234567' } });
     expect(resCf.statusCode).toBe(400);
   });
+
+  it('11. La base impide borrar identidades fiscales con comprobantes (conservación fiscal)', async () => {
+    await expect(
+      getDatabase().delete(fiscalIdentities).where(eq(fiscalIdentities.id, fiscalIdentityId))
+    ).rejects.toThrow();
+  });
 });
 
