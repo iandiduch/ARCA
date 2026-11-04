@@ -1,5 +1,6 @@
 import { InvoiceRepository, type FullInvoice, type InvoiceListFilters } from '../infrastructure/invoice-repository.js';
 import { FiscalIdentityRepository } from '../../fiscal-identities/infrastructure/fiscal-identity-repository.js';
+import { CustomerRepository } from '../../customers/infrastructure/customer-repository.js';
 import { TaxCalculator, type InvoiceItemInput } from '../domain/tax-calculator.js';
 import { FiscalQrGenerator } from '../domain/qr-generator.js';
 import { WsaaClient } from '../../arca/infrastructure/wsaa/wsaa-client.js';
@@ -75,6 +76,7 @@ type ArcaEnvironment = 'homologation' | 'production';
 export class InvoiceService {
   private invoiceRepo = new InvoiceRepository();
   private fiscalRepo = new FiscalIdentityRepository();
+  private customerRepo = new CustomerRepository();
 
   /**
    * Crea un comprobante en estado borrador (DRAFT) sin consultar ARCA ni asignar numeración oficial
@@ -90,6 +92,7 @@ export class InvoiceService {
     }
 
     this.validateFiscalRules(input);
+    await this.assertCustomerBelongsToTenant(tenantId, input.customerId);
 
     const voucherLetter = getVoucherLetter(input.voucherType);
     const pricesIncludeVat = input.pricesIncludeVat !== false;
@@ -267,6 +270,7 @@ export class InvoiceService {
 
     // C. Validaciones fiscales según normativa ARCA
     this.validateFiscalRules(input);
+    await this.assertCustomerBelongsToTenant(tenantId, input.customerId);
 
     const docType = input.customer?.docType ?? 99;
     const docNumber = this.normalizeDocNumber(input);
@@ -797,6 +801,12 @@ export class InvoiceService {
     const m = parseInt(dateStr.substring(4, 6), 10) - 1;
     const d = parseInt(dateStr.substring(6, 8), 10);
     return new Date(Date.UTC(y, m, d, 23, 59, 59));
+  }
+
+  private async assertCustomerBelongsToTenant(tenantId: string, customerId: string | undefined): Promise<void> {
+    if (customerId && !(await this.customerRepo.findById(tenantId, customerId))) {
+      throw new NotFoundError(`Cliente con ID "${customerId}" no encontrado`);
+    }
   }
 
   /** Número de documento del receptor sólo con dígitos ("20-30123456-7" → "20301234567") */

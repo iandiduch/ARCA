@@ -366,5 +366,11 @@ describe('Conciliación de comprobantes interrumpidos y numeración fiscal', () 
       getDatabase().delete(fiscalIdentities).where(eq(fiscalIdentities.id, fiscalIdentityId))
     ).rejects.toThrow();
   });
+
+  it('12. Rechaza un customerId que no pertenece al comercio', async () => {
+    const res = await emit({}, { customerId: '00000000-0000-4000-8000-000000000000' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().message).toContain('Cliente');
+  });
 });
 
