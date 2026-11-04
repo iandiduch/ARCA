@@ -1,3 +1,5 @@
+import { ValidationError } from '../errors/app-error.js';
+
 /**
  * Catálogos impositivos oficiales ARCA / AFIP (WSFEv1).
  */
@@ -29,6 +31,51 @@ export function resolveIvaCode(rate: number): { afipCode: number; rate: number }
   if (rounded === 2.5) return { afipCode: 9, rate: 2.5 };
   return { afipCode: 5, rate: 21.0 }; // Default 21%
 }
+
+/** Alícuota correspondiente a cada código de IVA de WSFEv1 (1=No Gravado, 2=Exento, 3=0%) */
+export const IVA_CODE_RATES: Record<number, number> = {
+  1: 0,
+  2: 0,
+  3: 0,
+  4: 10.5,
+  5: 21,
+  6: 27,
+  8: 5,
+  9: 2.5
+};
+
+const RATE_TO_CODE: Record<string, number> = { '0': 3, '2.5': 9, '5': 8, '10.5': 4, '21': 5, '27': 6 };
+
+/**
+ * Resuelve alícuota y código de IVA de un ítem. Si no se informa ninguno se asume 21%.
+ * Rechaza alícuotas fuera del catálogo de ARCA y combinaciones incoherentes (p. ej. Exento con 21%).
+ */
+export function resolveItemVat(vatRate?: number, vatAfipCode?: number): { rate: number; afipCode: number } {
+  if (vatAfipCode !== undefined) {
+    const codeRate = IVA_CODE_RATES[vatAfipCode];
+    if (codeRate === undefined) {
+      throw new ValidationError(
+        `Código de IVA ${vatAfipCode} inválido. Valores admitidos: ${Object.keys(IVA_CODE_RATES).join(', ')}`
+      );
+    }
+    if (vatRate !== undefined && Number(vatRate.toFixed(2)) !== codeRate) {
+      throw new ValidationError(
+        `La alícuota ${vatRate}% no corresponde al código de IVA ${vatAfipCode} (${codeRate}%)`
+      );
+    }
+    return { rate: codeRate, afipCode: vatAfipCode };
+  }
+
+  const rate = vatRate ?? 21;
+  const afipCode = RATE_TO_CODE[String(Number(rate.toFixed(2)))];
+  if (afipCode === undefined) {
+    throw new ValidationError(`Alícuota de IVA ${rate}% inválida. Valores admitidos: 0, 2.5, 5, 10.5, 21, 27`);
+  }
+  return { rate, afipCode };
+}
+
+/** Tipos de comprobante soportados por la emisión en WSFEv1 */
+export const SUPPORTED_VOUCHER_TYPES = [1, 2, 3, 6, 7, 8, 11, 12, 13, 51, 52, 53];
 
 export const CONCEPT_TYPES = {
   PRODUCTOS: 1,

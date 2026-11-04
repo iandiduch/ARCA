@@ -38,7 +38,7 @@ Diseñada bajo principios de **Clean Architecture**, alta concurrencia, resilien
 * **Reconciliación Automática:** Endpoint `reconcile` que consulta `FECompConsultar` para recuperar el CAE de comprobantes pendientes tras caídas temporales de red.
 
 ### 🏢 Multi-Tenancy y Seguridad
-* **Aislamiento Estricto por Comercio:** Cada comercio opera con sus propias API Keys sha256, roles (`admin`, `seller`), identidades fiscales y puntos de venta.
+* **Aislamiento Estricto por Comercio:** Cada comercio opera con sus propias API Keys sha256, roles (`admin`: además gestiona API Keys del comercio; `pos_client`: operación fiscal y comercial; `read_only`: sólo lectura), identidades fiscales y puntos de venta.
 * **Clave Maestra de Plataforma:** Administración global protegida contra *Timing Attacks* mediante `crypto.timingSafeEqual`.
 * **Rate Limiting:** Limitador de tasa configurable por IP y comercio.
 * **CORS Configurable:** Restricción estricta de dominios para entornos de producción.
@@ -112,7 +112,7 @@ cp .env.example .env
 | `HOST` | String | `0.0.0.0` | Dirección de enlace de red (`0.0.0.0` para Docker/VPS). |
 | `NODE_ENV` | String | `development` | Entorno de ejecución: `development`, `test` o `production`. |
 | `LOG_LEVEL` | String | `info` | Nivel de logs de Pino: `fatal`, `error`, `warn`, `info`, `debug`. |
-| `CORS_ORIGIN` | String | `*` | Orígenes autorizados en producción (ej: `https://pos.midominio.com`). |
+| `CORS_ORIGIN` | String | `*` | Orígenes autorizados separados por coma (ej: `https://pos.midominio.com`). Con `*` no se habilitan credenciales. |
 | `DATABASE_URL` | URL | - | Cadena de conexión PostgreSQL (`postgres://user:pass@host:5432/db`). |
 | `DATABASE_MAX_CONNECTIONS` | Número | `10` | Conexiones máximas simultáneas en el pool de PostgreSQL. |
 | `DATABASE_STATEMENT_TIMEOUT_MS`| Número | `10000` | Límite máximo de espera para consultas SQL (10s por defecto). |
@@ -122,6 +122,12 @@ cp .env.example .env
 | `ARCA_PLATFORM_CUIT` | String (11) | `20000000001` | **CUIT emisor de la plataforma o comercio raíz** (11 dígitos numéricos sin guiones, ej. `20111111112`). En homologación se usa el CUIT con el que se solicitó el acceso en WSASS; en producción, el CUIT del contribuyente titular. |
 | `RATE_LIMIT_MAX` | Número | `300` | Peticiones máximas permitidas por ventana de tiempo. |
 | `RATE_LIMIT_WINDOW_MS` | Número | `60000` | Ventana de tiempo del limitador de tasa en milisegundos (1 minuto). |
+| `TRUST_PROXY` | String | `false` | Proxy inverso confiable para tomar la IP real: `false`, `true`, cantidad de saltos (`1` detrás de Traefik/Dokploy) o lista de IPs/CIDR. |
+| `DATABASE_LOCK_MAX_CONNECTIONS` | Número | `10` | Conexiones del pool dedicado a los bloqueos de emisión por punto de venta y renovación de tickets WSAA. |
+| `FISCAL_LOCK_TIMEOUT_MS` | Número | `30000` | Espera máxima por el turno de emisión de un punto de venta antes de responder `503 RESOURCE_BUSY`. |
+| `DOCS_ENABLED` | Boolean | `false` en producción | Habilita Swagger UI en `/documentation`. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | - | - | Servidor de correo para `POST /invoices/:id/email`. Sin `SMTP_HOST`, en producción el endpoint responde `503`. |
+| `EMAIL_MAX_SENDS_PER_INVOICE` | Número | `5` | Máximo de envíos por email del mismo comprobante en 24 h. |
 
 > 💡 **Guía de configuración para variables de ARCA:**
 > * **`ARCA_DEFAULT_ENVIRONMENT`**:

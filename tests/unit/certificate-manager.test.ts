@@ -3,14 +3,20 @@ import forge from 'node-forge';
 import { CertificateManager } from '../../src/modules/arca/infrastructure/certificates/certificate-manager.js';
 
 describe('Gestión de Certificados Digitales X.509 y CSR (CertificateManager)', () => {
-  it('debe generar un par de claves RSA 2048 y un CSR en formato PEM', () => {
-    const { privateKeyPem, csrPem } = CertificateManager.generateKeyPairAndCsr(
+  it('debe generar un par de claves RSA 2048 y un CSR en formato PEM', async () => {
+    const { privateKeyPem, csrPem } = await CertificateManager.generateKeyPairAndCsr(
       '30503612891',
       'Servicios Generales S.A.'
     );
 
     expect(privateKeyPem).toContain('-----BEGIN RSA PRIVATE KEY-----');
     expect(csrPem).toContain('-----BEGIN CERTIFICATE REQUEST-----');
+
+    // El CSR debe estar firmado con la clave generada y la clave debe ser RSA 2048
+    const csr = forge.pki.certificationRequestFromPem(csrPem);
+    expect(csr.verify()).toBe(true);
+    const key = forge.pki.privateKeyFromPem(privateKeyPem);
+    expect(key.n.bitLength()).toBe(2048);
   });
 
   it('debe inspeccionar un certificado X.509 y comprobar correspondencia con su clave privada', () => {

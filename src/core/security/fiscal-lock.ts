@@ -1,12 +1,11 @@
-import crypto from 'node:crypto';
-import { getDatabasePool } from '../../infrastructure/database/connection.js';
-import { logger } from '../../app/logger.js';
+import { loadConfig } from '../../app/config.js';
+import { withAdvisoryLock } from './advisory-lock.js';
 
 export class FiscalLock {
   /**
    * Ejecuta una operación fiscal bajo un bloqueo de exclusión mutua por Punto de Venta y Tipo de Comprobante,
    * evitando condiciones de carrera en getUltimoComprobante y asignación de CAE ante emisiones concurrentes.
-   * Utiliza pg_advisory_lock sobre una conexión dedicada del pool.
+   * Si el turno no se obtiene en FISCAL_LOCK_TIMEOUT_MS responde 503 RESOURCE_BUSY.
    */
   public static async withLock<T>(
     fiscalIdentityId: string,
@@ -14,26 +13,9 @@ export class FiscalLock {
     voucherType: number,
     fn: () => Promise<T>
   ): Promise<T> {
-    const lockKey = `${fiscalIdentityId}:${pointOfSaleNumber}:${voucherType}`;
-    const hash = crypto.createHash('sha256').update(lockKey).digest();
-    const classId = hash.readInt32BE(0);
-    const objId = hash.readInt32BE(4);
-
-    const pool = getDatabasePool();
-    const client = await pool.connect();
-
-    try {
-      logger.debug({ fiscalIdentityId, pointOfSaleNumber, voucherType }, 'Adquiriendo bloqueo fiscal exclusivo');
-      await client.query('SELECT pg_advisory_lock($1, $2)', [classId, objId]);
-      return await fn();
-    } finally {
-      try {
-        await client.query('SELECT pg_advisory_unlock($1, $2)', [classId, objId]);
-      } catch (unlockErr) {
-        logger.error({ unlockErr, lockKey }, 'Error al liberar pg_advisory_unlock');
-      } finally {
-        client.release();
-      }
-    }
+    return withAdvisoryLock(`fiscal:${fiscalIdentityId}:${pointOfSaleNumber}:${voucherType}`, fn, {
+      timeoutMs: loadConfig().FISCAL_LOCK_TIMEOUT_MS,
+      busyMessage: `El punto de venta ${pointOfSaleNumber} está procesando otras emisiones del mismo tipo de comprobante. Reintente en unos segundos.`
+    });
   }
 }

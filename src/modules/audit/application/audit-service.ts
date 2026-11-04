@@ -1,7 +1,7 @@
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import { auditLogs, type NewAuditLog } from '../../../infrastructure/database/schema/audit-logs.js';
 import { logger } from '../../../app/logger.js';
-import { eq, desc } from 'drizzle-orm';
+import { eq, and, gte, desc, sql } from 'drizzle-orm';
 
 export interface RecordAuditParams {
   tenantId?: string | undefined;
@@ -45,5 +45,21 @@ export class AuditService {
       .orderBy(desc(auditLogs.createdAt))
       .limit(limit)
       .offset(offset);
+  }
+
+  public static async countRecentActions(tenantId: string, action: string, entityId: string, since: Date): Promise<number> {
+    const db = getDatabase();
+    const [row] = await db
+      .select({ count: sql<number>`cast(count(*) as integer)` })
+      .from(auditLogs)
+      .where(
+        and(
+          eq(auditLogs.tenantId, tenantId),
+          eq(auditLogs.action, action),
+          eq(auditLogs.entityId, entityId),
+          gte(auditLogs.createdAt, since)
+        )
+      );
+    return row?.count ?? 0;
   }
 }

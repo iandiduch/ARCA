@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type, type Static } from '@sinclair/typebox';
 import { InvoiceService } from '../application/invoice-service.js';
 import { authenticate, requireTenant } from '../../../core/security/auth-middleware.js';
+import { argentinaEndOfDay, argentinaStartOfDay } from '../../../core/fiscal/fiscal-dates.js';
 
 const CustomerInputSchema = Type.Optional(
   Type.Object({
@@ -20,8 +21,8 @@ const InvoiceItemInputSchema = Type.Object({
   quantity: Type.Number({ minimum: 0.0001, description: 'Cantidad vendida' }),
   unitPrice: Type.Number({ minimum: 0, description: 'Precio unitario' }),
   discount: Type.Optional(Type.Number({ minimum: 0, default: 0, description: 'Descuento aplicado al ítem' })),
-  vatRate: Type.Optional(Type.Number({ description: 'Alícuota de IVA (21, 10.5, 0, 27)', default: 21 })),
-  vatAfipCode: Type.Optional(Type.Integer({ description: 'Código AFIP de alícuota (5=21%, 4=10.5%, 3=0%, 6=27%)' }))
+  vatRate: Type.Optional(Type.Number({ description: 'Alícuota de IVA (0, 2.5, 5, 10.5, 21, 27). Por defecto 21, o la del vatAfipCode' })),
+  vatAfipCode: Type.Optional(Type.Integer({ description: 'Código AFIP de alícuota (1=No Gravado, 2=Exento, 3=0%, 4=10.5%, 5=21%, 6=27%, 8=5%, 9=2.5%)' }))
 });
 
 const AssociatedVoucherInputSchema = Type.Object({
@@ -36,9 +37,9 @@ const EmitInvoiceBodySchema = Type.Object({
   pointOfSaleNumber: Type.Integer({ minimum: 1, maximum: 99999, description: 'Número de punto de venta (1 a 99999)' }),
   voucherType: Type.Integer({ description: '1=Factura A, 6=Factura B, 11=Factura C, 3=NC A, 8=NC B, 13=NC C' }),
   concept: Type.Optional(Type.Integer({ minimum: 1, maximum: 3, default: 1, description: '1=Productos, 2=Servicios, 3=Productos y Servicios' })),
-  serviceDateFrom: Type.Optional(Type.String({ description: 'Fecha inicio del servicio (YYYY-MM-DD)' })),
-  serviceDateTo: Type.Optional(Type.String({ description: 'Fecha fin del servicio (YYYY-MM-DD)' })),
-  paymentDueDate: Type.Optional(Type.String({ description: 'Fecha de vencimiento de pago (YYYY-MM-DD)' })),
+  serviceDateFrom: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha inicio del servicio (YYYY-MM-DD)' })),
+  serviceDateTo: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha fin del servicio (YYYY-MM-DD)' })),
+  paymentDueDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha de vencimiento de pago (YYYY-MM-DD)' })),
   pricesIncludeVat: Type.Optional(Type.Boolean({ default: true, description: 'true si unitPrice incluye IVA (POS minorista), false si es precio neto' })),
   customerId: Type.Optional(Type.String({ format: 'uuid', description: 'ID opcional del cliente registrado' })),
   customer: CustomerInputSchema,
@@ -66,7 +67,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' }),
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' })),
           'x-idempotency-key': Type.Optional(Type.String({ description: 'Clave de idempotencia alternativa en cabecera' }))
         }),
         body: EmitInvoiceBodySchema
@@ -97,7 +98,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         body: EmitInvoiceBodySchema
       }
@@ -119,7 +120,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante a reconciliar' })
@@ -143,15 +144,15 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         querystring: Type.Object({
           status: Type.Optional(Type.String({ description: 'Filtrar por estado: DRAFT, AUTHORIZED, REJECTED, PENDING_RECONCILIATION' })),
           fiscalIdentityId: Type.Optional(Type.String({ format: 'uuid' })),
           voucherType: Type.Optional(Type.Integer()),
           pointOfSaleNumber: Type.Optional(Type.Integer()),
-          fromDate: Type.Optional(Type.String({ description: 'Fecha inicio (YYYY-MM-DD)' })),
-          toDate: Type.Optional(Type.String({ description: 'Fecha fin (YYYY-MM-DD)' })),
+          fromDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha inicio (YYYY-MM-DD, hora argentina)' })),
+          toDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha fin inclusiva (YYYY-MM-DD, hora argentina)' })),
           limit: Type.Optional(Type.Integer({ default: 50, minimum: 1, maximum: 100 })),
           offset: Type.Optional(Type.Integer({ default: 0, minimum: 0 }))
         })
@@ -163,8 +164,8 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
 
       const result = await invoiceService.listInvoices(tenant.id, {
         ...rest,
-        fromDate: fromDate ? new Date(fromDate) : undefined,
-        toDate: toDate ? new Date(toDate) : undefined
+        fromDate: fromDate ? argentinaStartOfDay(fromDate) : undefined,
+        toDate: toDate ? argentinaEndOfDay(toDate) : undefined
       });
 
       return reply.send(result);
@@ -181,7 +182,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })

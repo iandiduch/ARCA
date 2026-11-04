@@ -39,7 +39,15 @@ export class FiscalIdentityService {
     }
 
     const environment = input.environment ?? 'homologation';
-    const connectionType = input.connectionType ?? 'DELEGATION';
+    const connectionType = input.connectionType ?? 'OWN_CERTIFICATE';
+
+    // La emisión siempre firma con el certificado propio de la identidad: la delegación del servicio
+    // al CUIT de la plataforma (certificado de plataforma + Cuit representado) no está implementada.
+    if (connectionType === 'DELEGATION') {
+      throw new ValidationError(
+        'El modo DELEGATION (delegar el web service al CUIT de la plataforma) todavía no está soportado. Use connectionType OWN_CERTIFICATE y cargue el certificado del comercio.'
+      );
+    }
 
     const existing = await this.repo.findByCuit(tenantId, cleanCuit, environment);
     if (existing) {
@@ -48,11 +56,8 @@ export class FiscalIdentityService {
       );
     }
 
-    const initialStatus = connectionType === 'DELEGATION' ? 'AUTHORIZATION_PENDING' : 'IDENTITY_PENDING';
-    const statusReason =
-      connectionType === 'DELEGATION'
-        ? 'Pendiente de delegación del servicio en el portal de ARCA al CUIT de la plataforma'
-        : 'Pendiente de generación de solicitud de certificado digital (CSR)';
+    const initialStatus = 'IDENTITY_PENDING';
+    const statusReason = 'Pendiente de generación de solicitud de certificado digital (CSR)';
 
     const identity = await this.repo.create({
       tenantId,
@@ -132,7 +137,7 @@ export class FiscalIdentityService {
   public async generateCertificateRequest(tenantId: string, identityId: string, userId?: string) {
     const identity = await this.getIdentityById(tenantId, identityId);
 
-    const { privateKeyPem, csrPem } = CertificateManager.generateKeyPairAndCsr(
+    const { privateKeyPem, csrPem } = await CertificateManager.generateKeyPairAndCsr(
       identity.cuit,
       identity.businessName
     );
@@ -140,19 +145,29 @@ export class FiscalIdentityService {
     // Cifrar la clave privada en reposo con AES-256-GCM
     const encryptedKey = EncryptionService.encrypt(privateKeyPem);
 
+    // La solicitud se guarda inactiva: si es una renovación, el certificado vigente sigue firmando
+    // hasta que se cargue el nuevo certificado emitido por ARCA.
     await this.repo.saveCertificate({
       fiscalIdentityId: identity.id,
       encryptedPrivateKey: encryptedKey.ciphertext,
       privateKeyIv: encryptedKey.iv,
       privateKeyAuthTag: encryptedKey.authTag,
       csr: csrPem,
-      active: true
+      active: false
     });
 
-    await this.repo.update(tenantId, identity.id, {
-      status: 'CERTIFICATE_PENDING',
-      statusReason: 'CSR generado. Descargue el archivo y tramítelo en el portal de ARCA.'
-    });
+    const currentCert = await this.repo.getActiveCertificate(identity.id);
+    if (currentCert) {
+      await this.repo.update(tenantId, identity.id, {
+        statusReason:
+          'Renovación en curso: CSR generado. El certificado vigente se sigue usando hasta cargar el nuevo emitido por ARCA.'
+      });
+    } else {
+      await this.repo.update(tenantId, identity.id, {
+        status: 'CERTIFICATE_PENDING',
+        statusReason: 'CSR generado. Descargue el archivo y tramítelo en el portal de ARCA.'
+      });
+    }
 
     await AuditService.record({
       tenantId,
@@ -183,21 +198,23 @@ export class FiscalIdentityService {
     userId?: string
   ) {
     const identity = await this.getIdentityById(tenantId, identityId);
-    const certRecord = await this.repo.getActiveCertificate(identity.id);
+    const pendingRequests = await this.repo.getPendingCertificateRequests(identity.id);
 
-    if (!certRecord) {
+    if (pendingRequests.length === 0) {
       throw new ValidationError('No existe una solicitud de certificado previa para este comercio');
     }
 
-    // Desencriptar la clave privada almacenada para verificar la correspondencia
-    const privateKeyPem = EncryptionService.decrypt({
-      ciphertext: certRecord.encryptedPrivateKey,
-      iv: certRecord.privateKeyIv,
-      authTag: certRecord.privateKeyAuthTag
+    // Buscar la solicitud CSR cuya clave privada corresponde al certificado cargado
+    const certRecord = pendingRequests.find((req) => {
+      const privateKeyPem = EncryptionService.decrypt({
+        ciphertext: req.encryptedPrivateKey,
+        iv: req.privateKeyIv,
+        authTag: req.privateKeyAuthTag
+      });
+      return CertificateManager.matchKeyAndCert(privateKeyPem, certPem);
     });
 
-    const isMatch = CertificateManager.matchKeyAndCert(privateKeyPem, certPem);
-    if (!isMatch) {
+    if (!certRecord) {
       throw new ValidationError(
         'El certificado público cargado no corresponde a la clave privada generada para este comercio'
       );
@@ -208,23 +225,25 @@ export class FiscalIdentityService {
       throw new ValidationError(`El certificado ya se encuentra vencido (expiró el ${metadata.validTo.toISOString()})`);
     }
 
-    await this.repo.saveCertificate({
-      fiscalIdentityId: identity.id,
-      encryptedPrivateKey: certRecord.encryptedPrivateKey,
-      privateKeyIv: certRecord.privateKeyIv,
-      privateKeyAuthTag: certRecord.privateKeyAuthTag,
-      csr: certRecord.csr,
+    await this.repo.activateCertificate(identity.id, certRecord.id, {
       certificate: certPem,
       certificateFingerprint: metadata.fingerprint,
       validFrom: metadata.validFrom,
-      validTo: metadata.validTo,
-      active: true
+      validTo: metadata.validTo
     });
 
-    await this.repo.update(tenantId, identity.id, {
-      status: 'AUTHORIZATION_PENDING',
-      statusReason: 'Certificado verificado. Recuerde asociar el computador fiscal al servicio "Facturación Electrónica" en ARCA.'
-    });
+    // En una renovación de una identidad ya conectada no se corta la emisión: el certificado nuevo
+    // se valida en la próxima prueba de conexión (o al renovar el ticket WSAA).
+    if (identity.status === 'CONNECTED') {
+      await this.repo.update(tenantId, identity.id, {
+        statusReason: 'Certificado renovado. Ejecute la prueba de conexión para validarlo con ARCA.'
+      });
+    } else {
+      await this.repo.update(tenantId, identity.id, {
+        status: 'AUTHORIZATION_PENDING',
+        statusReason: 'Certificado verificado. Recuerde asociar el computador fiscal al servicio "Facturación Electrónica" en ARCA.'
+      });
+    }
 
     await AuditService.record({
       tenantId,
@@ -287,7 +306,13 @@ export class FiscalIdentityService {
         { environment: identity.environment as any }
       );
 
-      // Guardar puntos de venta detectados (o crear Punto 1 si el padrón no tiene ninguno en testing)
+      // Guardar puntos de venta detectados. Sólo en homologación se crea un Punto 1 de prueba si no hay ninguno:
+      // en producción emitir con un punto de venta inexistente sería rechazado por ARCA.
+      if (ptos.length === 0 && identity.environment === 'production') {
+        throw new ValidationError(
+          'ARCA no informa puntos de venta habilitados para Web Services en este CUIT. Cree uno en "Administración de Puntos de Venta y Domicilios" (sistema "Factura Electrónica - Monotributo / RECE") y vuelva a probar la conexión.'
+        );
+      }
       if (ptos.length === 0) {
         await this.repo.syncPointsOfSale(identity.id, [
           {
@@ -306,7 +331,7 @@ export class FiscalIdentityService {
             number: p.nro,
             type: p.emisionTipo,
             description: `Punto de Venta ${p.nro} (${p.emisionTipo})`,
-            active: !p.bloqueado
+            active: !p.bloqueado && !p.fchBaja
           }))
         );
       }

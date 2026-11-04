@@ -1,4 +1,4 @@
-import { resolveIvaCode, requiresVatBreakdown } from '../../../core/fiscal/tax-catalogs.js';
+import { resolveItemVat, requiresVatBreakdown } from '../../../core/fiscal/tax-catalogs.js';
 
 export interface InvoiceItemInput {
   productId?: string | undefined;
@@ -7,7 +7,7 @@ export interface InvoiceItemInput {
   quantity: number;
   unitPrice: number;
   discount?: number | undefined;
-  vatRate?: number | undefined; // default 21
+  vatRate?: number | undefined; // default 21 (o la alícuota del vatAfipCode)
   vatAfipCode?: number | undefined;
 }
 
@@ -69,9 +69,7 @@ export class TaxCalculator {
       const quantity = Math.max(0.0001, item.quantity);
       const unitPrice = Math.max(0, item.unitPrice);
       const discount = Math.max(0, item.discount ?? 0);
-      const resolvedVat = resolveIvaCode(item.vatRate ?? 21.0);
-      const vatRate = item.vatRate ?? resolvedVat.rate;
-      const vatAfipCode = item.vatAfipCode ?? resolvedVat.afipCode;
+      const { rate: vatRate, afipCode: vatAfipCode } = resolveItemVat(item.vatRate, item.vatAfipCode);
 
       let netSubtotal: number;
       let vatSubtotal: number;

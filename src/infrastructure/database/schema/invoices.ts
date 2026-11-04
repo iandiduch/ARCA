@@ -9,10 +9,10 @@ export const invoices = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     tenantId: uuid('tenant_id')
       .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
+      .references(() => tenants.id, { onDelete: 'restrict' }),
     fiscalIdentityId: uuid('fiscal_identity_id')
       .notNull()
-      .references(() => fiscalIdentities.id, { onDelete: 'cascade' }),
+      .references(() => fiscalIdentities.id, { onDelete: 'restrict' }),
     pointOfSaleNumber: integer('point_of_sale_number').notNull(),
     voucherType: integer('voucher_type').notNull(), // 1=Factura A, 6=Factura B, 11=Factura C, etc.
     voucherLetter: text('voucher_letter').notNull(), // 'A', 'B', 'C', 'M'

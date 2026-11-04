@@ -1,52 +1,94 @@
-import { eq, and, gt } from 'drizzle-orm';
+import crypto from 'node:crypto';
+import { eq, and, gt, lte } from 'drizzle-orm';
 import { getDatabase } from '../../infrastructure/database/connection.js';
-import { idempotencyKeys, type IdempotencyKey } from '../../infrastructure/database/schema/idempotency-keys.js';
+import { idempotencyKeys } from '../../infrastructure/database/schema/idempotency-keys.js';
+import { AppError } from '../errors/app-error.js';
 
 export type IdempotencyAcquireResult =
   | { state: 'ACQUIRED' }
   | { state: 'IN_PROGRESS' }
   | { state: 'CACHED'; statusCode: number; responseBody: unknown };
 
+export interface IdempotencyAcquireOptions {
+  ttlHours?: number | undefined;
+  /** Huella del payload: reutilizar la clave con un payload distinto es un error del cliente */
+  requestHash?: string | undefined;
+}
+
+export class IdempotencyKeyMismatchError extends AppError {
+  constructor() {
+    super(
+      'La clave de idempotencia ya fue utilizada con un payload distinto. Genere una clave nueva para cada operación.',
+      422,
+      'IDEMPOTENCY_KEY_MISMATCH'
+    );
+  }
+}
+
+/**
+ * JSON con claves ordenadas, para que dos payloads equivalentes produzcan la misma huella.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export class IdempotencyService {
+  public static hashPayload(payload: unknown): string {
+    return crypto.createHash('sha256').update(stableStringify(payload)).digest('hex');
+  }
+
   /**
-   * Intenta reservar una clave de idempotencia para evitar solicitudes concurrentes duplicadas
+   * Intenta reservar una clave de idempotencia para evitar solicitudes concurrentes duplicadas.
+   * Una clave vencida se reutiliza en el mismo upsert atómico.
    */
   public static async acquire(
     tenantId: string,
     key: string,
     resource: string = 'invoices',
-    ttlHours: number = 24
+    options: IdempotencyAcquireOptions = {}
   ): Promise<IdempotencyAcquireResult> {
     const db = getDatabase();
     const now = new Date();
+    const expiresAt = new Date(now.getTime() + (options.ttlHours ?? 24) * 3600 * 1000);
+    const requestHash = options.requestHash ?? null;
 
+    const [reserved] = await db
+      .insert(idempotencyKeys)
+      .values({ tenantId, key, resource, status: 'PROCESSING', requestHash, expiresAt })
+      .onConflictDoUpdate({
+        target: [idempotencyKeys.tenantId, idempotencyKeys.key],
+        set: { resource, status: 'PROCESSING', statusCode: null, responseBody: null, requestHash, expiresAt, createdAt: now },
+        where: lte(idempotencyKeys.expiresAt, now)
+      })
+      .returning({ id: idempotencyKeys.id });
+
+    if (reserved) {
+      return { state: 'ACQUIRED' };
+    }
+
+    // Existe una reserva vigente para esta clave
     const [existing] = await db
       .select()
       .from(idempotencyKeys)
-      .where(
-        and(
-          eq(idempotencyKeys.tenantId, tenantId),
-          eq(idempotencyKeys.key, key),
-          gt(idempotencyKeys.expiresAt, now)
-        )
-      )
+      .where(and(eq(idempotencyKeys.tenantId, tenantId), eq(idempotencyKeys.key, key), gt(idempotencyKeys.expiresAt, now)))
       .limit(1);
 
     if (!existing) {
-      const expiresAt = new Date(now.getTime() + ttlHours * 3600 * 1000);
-      try {
-        await db.insert(idempotencyKeys).values({
-          tenantId,
-          key,
-          resource,
-          status: 'PROCESSING',
-          expiresAt
-        });
-        return { state: 'ACQUIRED' };
-      } catch {
-        // En caso de carrera concurrente entre dos inserts simultáneos
-        return { state: 'IN_PROGRESS' };
-      }
+      // Fue liberada o venció entre ambas consultas: reintentar la reserva
+      return this.acquire(tenantId, key, resource, options);
+    }
+
+    if (requestHash && existing.requestHash && existing.requestHash !== requestHash) {
+      throw new IdempotencyKeyMismatchError();
     }
 
     if (existing.status === 'COMPLETED' && existing.statusCode && existing.responseBody) {
@@ -66,13 +108,14 @@ export class IdempotencyService {
   public static async waitForCompletion(
     tenantId: string,
     key: string,
-    maxWaitMs: number = 10000,
-    pollIntervalMs: number = 100
+    options: IdempotencyAcquireOptions & { maxWaitMs?: number; pollIntervalMs?: number } = {}
   ): Promise<IdempotencyAcquireResult> {
+    const maxWaitMs = options.maxWaitMs ?? 10000;
+    const pollIntervalMs = options.pollIntervalMs ?? 100;
     const startTime = Date.now();
     while (Date.now() - startTime < maxWaitMs) {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      const res = await this.acquire(tenantId, key);
+      const res = await this.acquire(tenantId, key, 'invoices', options);
       if (res.state === 'CACHED' || res.state === 'ACQUIRED') {
         return res;
       }
@@ -108,5 +151,17 @@ export class IdempotencyService {
     await db
       .delete(idempotencyKeys)
       .where(and(eq(idempotencyKeys.tenantId, tenantId), eq(idempotencyKeys.key, key)));
+  }
+
+  /**
+   * Elimina las claves vencidas. Se ejecuta periódicamente desde el bootstrap.
+   */
+  public static async purgeExpired(): Promise<number> {
+    const db = getDatabase();
+    const deleted = await db
+      .delete(idempotencyKeys)
+      .where(lte(idempotencyKeys.expiresAt, new Date()))
+      .returning({ id: idempotencyKeys.id });
+    return deleted.length;
   }
 }

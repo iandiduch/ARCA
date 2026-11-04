@@ -27,7 +27,7 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
@@ -65,7 +65,7 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
@@ -103,7 +103,7 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
@@ -136,21 +136,23 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.post(
     '/api/v1/invoices/:id/email',
     {
+      // Límite propio más estricto que el global: cada envío sale por el SMTP de la plataforma
+      config: { rateLimit: { max: 30, timeWindow: '1 hour' } },
       schema: {
         summary: 'Enviar comprobante por correo electrónico con PDF adjunto',
         description: 'Envía un email al cliente con el PDF reglamentario de la factura adjunto y registra el evento en auditoría.',
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
         }),
         body: Type.Object({
           to: Type.String({ format: 'email', description: 'Correo electrónico del destinatario' }),
-          subject: Type.Optional(Type.String({ description: 'Asunto personalizado del correo' })),
-          customMessage: Type.Optional(Type.String({ description: 'Mensaje personalizado en el cuerpo del correo' }))
+          subject: Type.Optional(Type.String({ maxLength: 200, pattern: '^[^\r\n]*$', description: 'Asunto personalizado del correo (una línea)' })),
+          customMessage: Type.Optional(Type.String({ maxLength: 2000, description: 'Mensaje personalizado en el cuerpo del correo' }))
         })
       }
     },

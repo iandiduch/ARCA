@@ -8,6 +8,7 @@ import { fiscalIdentities } from '../../src/infrastructure/database/schema/fisca
 import { pointsOfSale } from '../../src/infrastructure/database/schema/points-of-sale.js';
 import { invoices } from '../../src/infrastructure/database/schema/invoices.js';
 import { generateApiKey } from '../../src/core/security/api-key.js';
+import { eq } from 'drizzle-orm';
 
 describe('Documentos Fiscales: PDF, Ticket Térmico, QR y Email (Fase 6)', () => {
   let app: FastifyInstance;
@@ -167,7 +168,23 @@ describe('Documentos Fiscales: PDF, Ticket Térmico, QR y Email (Fase 6)', () =>
     expect(resSvg.body).toContain('<svg');
   });
 
+  it('4a. POST /api/v1/invoices/:id/email - Rechaza enviar comprobantes no autorizados', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/invoices/${invoiceAId}/email`,
+      headers: { 'x-api-key': tenantAKey },
+      payload: { to: 'comprador@cliente.com' }
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toContain('autorizados por ARCA');
+  });
+
   it('4. POST /api/v1/invoices/:id/email - Envío de comprobante por correo con PDF adjunto', async () => {
+    await getDatabase()
+      .update(invoices)
+      .set({ status: 'AUTHORIZED', voucherNumber: 1, cae: '74123456789012' })
+      .where(eq(invoices.id, invoiceAId));
+
     const res = await app.inject({
       method: 'POST',
       url: `/api/v1/invoices/${invoiceAId}/email`,
@@ -184,6 +201,31 @@ describe('Documentos Fiscales: PDF, Ticket Térmico, QR y Email (Fase 6)', () =>
     expect(body.success).toBe(true);
     expect(body.sentTo).toBe('comprador@cliente.com');
     expect(body.messageId).toBeDefined();
+  });
+
+  it('4b. POST /api/v1/invoices/:id/email - Limita los reenvíos del mismo comprobante', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v1/invoices/${invoiceAId}/email`,
+        headers: { 'x-api-key': tenantAKey },
+        payload: { to: `spam${i}@ejemplo.com` }
+      });
+      statuses.push(res.statusCode);
+    }
+    // El test anterior ya envió 1; el máximo por defecto es 5 en 24 h
+    expect(statuses).toEqual([200, 200, 200, 200, 429]);
+  });
+
+  it('4c. POST /api/v1/invoices/:id/email - Rechaza asuntos multilínea', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/invoices/${invoiceAId}/email`,
+      headers: { 'x-api-key': tenantAKey },
+      payload: { to: 'comprador@cliente.com', subject: 'Hola\r\nBcc: victima@ejemplo.com' }
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it('5. AISLAMIENTO MULTI-TENANT: Comercio B NO puede acceder al PDF de Comercio A', async () => {

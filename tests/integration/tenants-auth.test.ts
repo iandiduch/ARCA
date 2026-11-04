@@ -13,6 +13,7 @@ describe('Seguridad y Aislamiento Multi-Tenant (Fase 2)', () => {
   let tenantB: { id: string; name: string; slug: string };
   let apiKeyA: { id: string; rawKey: string };
   let apiKeyB: { id: string; rawKey: string };
+  let adminKeyA: { id: string; rawKey: string };
 
   beforeAll(async () => {
     app = await createApp({ enableLogging: false });
@@ -122,6 +123,16 @@ describe('Seguridad y Aislamiento Multi-Tenant (Fase 2)', () => {
     expect(resB.statusCode).toBe(201);
     const bodyB = resB.json();
     apiKeyB = { id: bodyB.id, rawKey: bodyB.rawKey };
+
+    const resAdminA = await app.inject({
+      method: 'POST',
+      url: `/api/v1/tenants/${tenantA.id}/api-keys`,
+      headers: { 'x-api-key': masterKey },
+      payload: { name: 'Backoffice Comercio A', role: 'admin' }
+    });
+
+    expect(resAdminA.statusCode).toBe(201);
+    adminKeyA = { id: resAdminA.json().id, rawKey: resAdminA.json().rawKey };
   });
 
   it('6. El comercio A autenticado con su API Key solo ve sus propios datos (/me)', async () => {
@@ -157,7 +168,7 @@ describe('Seguridad y Aislamiento Multi-Tenant (Fase 2)', () => {
     const resList = await app.inject({
       method: 'GET',
       url: `/api/v1/tenants/${tenantB.id}/api-keys`,
-      headers: { 'x-api-key': apiKeyA.rawKey }
+      headers: { 'x-api-key': adminKeyA.rawKey }
     });
 
     expect(resList.statusCode).toBe(403);
@@ -167,7 +178,7 @@ describe('Seguridad y Aislamiento Multi-Tenant (Fase 2)', () => {
     const resCreate = await app.inject({
       method: 'POST',
       url: `/api/v1/tenants/${tenantB.id}/api-keys`,
-      headers: { 'x-api-key': apiKeyA.rawKey },
+      headers: { 'x-api-key': adminKeyA.rawKey },
       payload: { name: 'Clave Infiltrada' }
     });
 
@@ -180,7 +191,7 @@ describe('Seguridad y Aislamiento Multi-Tenant (Fase 2)', () => {
     const resCreate = await app.inject({
       method: 'POST',
       url: `/api/v1/tenants/${tenantA.id}/api-keys`,
-      headers: { 'x-api-key': apiKeyA.rawKey },
+      headers: { 'x-api-key': adminKeyA.rawKey },
       payload: { name: 'Clave Temporal para Revocar' }
     });
     expect(resCreate.statusCode).toBe(201);
@@ -198,7 +209,7 @@ describe('Seguridad y Aislamiento Multi-Tenant (Fase 2)', () => {
     const resRevoke = await app.inject({
       method: 'DELETE',
       url: `/api/v1/tenants/${tenantA.id}/api-keys/${tempKey.id}`,
-      headers: { 'x-api-key': apiKeyA.rawKey }
+      headers: { 'x-api-key': adminKeyA.rawKey }
     });
     expect(resRevoke.statusCode).toBe(200);
 
@@ -209,6 +220,59 @@ describe('Seguridad y Aislamiento Multi-Tenant (Fase 2)', () => {
       headers: { 'x-api-key': tempKey.rawKey }
     });
     expect(resCheckAfter.statusCode).toBe(401);
+  });
+
+  it('9b. ROLES: una API Key pos_client no puede gestionar API Keys de su propio comercio', async () => {
+    const resCreate = await app.inject({
+      method: 'POST',
+      url: `/api/v1/tenants/${tenantA.id}/api-keys`,
+      headers: { 'x-api-key': apiKeyA.rawKey },
+      payload: { name: 'Escalada de privilegios', role: 'admin' }
+    });
+    expect(resCreate.statusCode).toBe(403);
+
+    const resList = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tenants/${tenantA.id}/api-keys`,
+      headers: { 'x-api-key': apiKeyA.rawKey }
+    });
+    expect(resList.statusCode).toBe(403);
+  });
+
+  it('9c. ROLES: rechaza roles inexistentes al crear una API Key', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/tenants/${tenantA.id}/api-keys`,
+      headers: { 'x-api-key': masterKey },
+      payload: { name: 'Rol inventado', role: 'superuser' }
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('9d. ROLES: una API Key read_only puede leer pero no escribir', async () => {
+    const resCreate = await app.inject({
+      method: 'POST',
+      url: `/api/v1/tenants/${tenantA.id}/api-keys`,
+      headers: { 'x-api-key': masterKey },
+      payload: { name: 'Contador (solo lectura)', role: 'read_only' }
+    });
+    expect(resCreate.statusCode).toBe(201);
+    const readOnlyKey = resCreate.json().rawKey as string;
+
+    const resRead = await app.inject({
+      method: 'GET',
+      url: '/api/v1/tenants/me',
+      headers: { 'x-api-key': readOnlyKey }
+    });
+    expect(resRead.statusCode).toBe(200);
+
+    const resWrite = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/customers/00000000-0000-4000-8000-000000000000',
+      headers: { 'x-api-key': readOnlyKey }
+    });
+    expect(resWrite.statusCode).toBe(403);
+    expect(resWrite.json().message).toContain('sólo lectura');
   });
 
   it('10. Pista de Auditoría: El comercio A consulta sus logs y no ve los del comercio B', async () => {

@@ -20,6 +20,37 @@ export interface WsfeClientOptions {
   timeoutMs?: number | undefined;
 }
 
+/**
+ * Oculta el Token y Sign de WSAA de un XML SOAP antes de persistirlo o devolverlo por la API:
+ * son credenciales válidas ante ARCA por ~12 h para el CUIT del comercio.
+ */
+/** Escapa un valor para interpolarlo como texto dentro de un elemento XML */
+export function xmlEscape(value: string | number): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+export function redactWsaaCredentials(xml: string): string {
+  return xml
+    .replace(/<fev:Token>[^<]*<\/fev:Token>/g, '<fev:Token>[REDACTED]</fev:Token>')
+    .replace(/<fev:Sign>[^<]*<\/fev:Sign>/g, '<fev:Sign>[REDACTED]</fev:Sign>');
+}
+
+/**
+ * Devuelve el faultstring de un SOAP Fault (ARCA los responde con HTTP 500), o undefined si no hay fault.
+ */
+export function extractSoapFault(xml: string): string | undefined {
+  if (!/<(\w+:)?Fault[\s>]/.test(xml)) return undefined;
+  const parsed = new XMLParser({ removeNSPrefix: true }).parse(xml);
+  const fault = parsed?.Envelope?.Body?.Fault;
+  if (!fault) return undefined;
+  return String(fault.faultstring ?? fault.faultcode ?? 'SOAP Fault sin detalle');
+}
+
 export class Wsfev1Client {
   private static readonly ENDPOINTS = {
     homologation: 'https://wswhomo.afip.gob.ar/wsfev1/service.asmx',
@@ -91,9 +122,9 @@ export class Wsfev1Client {
   <soap:Body>
     <fev:FECompUltimoAutorizado>
       <fev:Auth>
-        <fev:Token>${auth.token}</fev:Token>
-        <fev:Sign>${auth.sign}</fev:Sign>
-        <fev:Cuit>${auth.cuit}</fev:Cuit>
+        <fev:Token>${xmlEscape(auth.token)}</fev:Token>
+        <fev:Sign>${xmlEscape(auth.sign)}</fev:Sign>
+        <fev:Cuit>${xmlEscape(auth.cuit)}</fev:Cuit>
       </fev:Auth>
       <fev:PtoVta>${ptoVta}</fev:PtoVta>
       <fev:CbteTipo>${cbteTipo}</fev:CbteTipo>
@@ -147,9 +178,9 @@ export class Wsfev1Client {
   <soap:Body>
     <fev:FEParamGetPtosVenta>
       <fev:Auth>
-        <fev:Token>${auth.token}</fev:Token>
-        <fev:Sign>${auth.sign}</fev:Sign>
-        <fev:Cuit>${auth.cuit}</fev:Cuit>
+        <fev:Token>${xmlEscape(auth.token)}</fev:Token>
+        <fev:Sign>${xmlEscape(auth.sign)}</fev:Sign>
+        <fev:Cuit>${xmlEscape(auth.cuit)}</fev:Cuit>
       </fev:Auth>
     </fev:FEParamGetPtosVenta>
   </soap:Body>
@@ -194,7 +225,8 @@ export class Wsfev1Client {
       nro: Number(p.Nro ?? 0),
       emisionTipo: String(p.EmisionTipo ?? ''),
       bloqueado: String(p.Bloqueado ?? '').toUpperCase() === 'S',
-      fchBaja: p.FchBaja ? String(p.FchBaja) : undefined
+      // ARCA informa "NULL" cuando el punto de venta no fue dado de baja
+      fchBaja: p.FchBaja && String(p.FchBaja).toUpperCase() !== 'NULL' ? String(p.FchBaja) : undefined
     }));
   }
 
@@ -253,9 +285,9 @@ export class Wsfev1Client {
   <soap:Body>
     <fev:FECAESolicitar>
       <fev:Auth>
-        <fev:Token>${auth.token}</fev:Token>
-        <fev:Sign>${auth.sign}</fev:Sign>
-        <fev:Cuit>${auth.cuit}</fev:Cuit>
+        <fev:Token>${xmlEscape(auth.token)}</fev:Token>
+        <fev:Sign>${xmlEscape(auth.sign)}</fev:Sign>
+        <fev:Cuit>${xmlEscape(auth.cuit)}</fev:Cuit>
       </fev:Auth>
       <fev:FeCAEReq>
         <fev:FeCabReq>
@@ -267,7 +299,7 @@ export class Wsfev1Client {
           <fev:FECAEDetRequest>
             <fev:Concepto>${det.concepto}</fev:Concepto>
             <fev:DocTipo>${det.docTipo}</fev:DocTipo>
-            <fev:DocNro>${det.docNro}</fev:DocNro>
+            <fev:DocNro>${xmlEscape(det.docNro)}</fev:DocNro>
             <fev:CbteDesde>${det.cbteDesde}</fev:CbteDesde>
             <fev:CbteHasta>${det.cbteHasta}</fev:CbteHasta>
             <fev:CbteFch>${det.cbteFch}</fev:CbteFch>
@@ -280,7 +312,7 @@ export class Wsfev1Client {
             ${det.fchServDesde ? `<fev:FchServDesde>${det.fchServDesde}</fev:FchServDesde>` : ''}
             ${det.fchServHasta ? `<fev:FchServHasta>${det.fchServHasta}</fev:FchServHasta>` : ''}
             ${det.fchVtoPago ? `<fev:FchVtoPago>${det.fchVtoPago}</fev:FchVtoPago>` : ''}
-            <fev:MonId>${det.monId || 'PES'}</fev:MonId>
+            <fev:MonId>${xmlEscape(det.monId || 'PES')}</fev:MonId>
             <fev:MonCotiz>${det.monCotiz || 1}</fev:MonCotiz>
             ${det.condicionIvaReceptorId ? `<fev:CondicionIVAReceptorId>${det.condicionIvaReceptorId}</fev:CondicionIVAReceptorId>` : ''}
             ${
@@ -293,7 +325,7 @@ export class Wsfev1Client {
                         <fev:Tipo>${a.tipo}</fev:Tipo>
                         <fev:PtoVta>${a.ptoVta}</fev:PtoVta>
                         <fev:Nro>${a.nro}</fev:Nro>
-                        ${a.cuit ? `<fev:Cuit>${a.cuit}</fev:Cuit>` : ''}
+                        ${a.cuit ? `<fev:Cuit>${xmlEscape(a.cuit)}</fev:Cuit>` : ''}
                       </fev:CbteAsoc>`
                       )
                       .join('')}
@@ -380,7 +412,7 @@ export class Wsfev1Client {
       observaciones,
       errores,
       eventos,
-      xmlRequest: soapBody,
+      xmlRequest: redactWsaaCredentials(soapBody),
       xmlResponse
     };
   }
@@ -418,9 +450,9 @@ export class Wsfev1Client {
   <soap:Body>
     <fev:FECompConsultar>
       <fev:Auth>
-        <fev:Token>${auth.token}</fev:Token>
-        <fev:Sign>${auth.sign}</fev:Sign>
-        <fev:Cuit>${auth.cuit}</fev:Cuit>
+        <fev:Token>${xmlEscape(auth.token)}</fev:Token>
+        <fev:Sign>${xmlEscape(auth.sign)}</fev:Sign>
+        <fev:Cuit>${xmlEscape(auth.cuit)}</fev:Cuit>
       </fev:Auth>
       <fev:FeCompConsReq>
         <fev:CbteTipo>${cbteTipo}</fev:CbteTipo>
@@ -508,7 +540,12 @@ export class Wsfev1Client {
 
       const responseText = await res.text();
 
-      if (!res.ok && !responseText.includes('<soap:Fault>') && !responseText.includes('<faultstring>')) {
+      const faultMessage = extractSoapFault(responseText);
+      if (faultMessage) {
+        throw new InfrastructureError(`WSFEv1 devolvió un error SOAP: ${faultMessage}`, 'ARCA_SOAP_FAULT');
+      }
+
+      if (!res.ok) {
         throw new InfrastructureError(`WSFEv1 respondió con HTTP ${res.status}: ${res.statusText}`);
       }
 

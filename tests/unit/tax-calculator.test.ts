@@ -109,4 +109,30 @@ describe('TaxCalculator — Motor de Cálculo Fiscal para WSFEv1', () => {
     expect(result.netTaxedAmount).toBe(800);
     expect(result.vatAmount).toBe(168);
   });
+
+  it('5. Ítem exento por código no calcula IVA aunque no se informe alícuota', () => {
+    const result = TaxCalculator.calculate(
+      [
+        { description: 'Libro', quantity: 1, unitPrice: 1000, vatAfipCode: 2 },
+        { description: 'Gaseosa', quantity: 1, unitPrice: 121, vatRate: 21 }
+      ],
+      6,
+      true
+    );
+    expect(result.exemptAmount).toBe(1000);
+    expect(result.vatAmount).toBe(21);
+    expect(result.totalAmount).toBe(1121);
+  });
+
+  it('6. Rechaza alícuotas fuera del catálogo de ARCA y combinaciones incoherentes', () => {
+    expect(() => TaxCalculator.calculate([{ description: 'X', quantity: 1, unitPrice: 100, vatRate: 19 }], 6)).toThrow(
+      /Alícuota de IVA 19% inválida/
+    );
+    expect(() =>
+      TaxCalculator.calculate([{ description: 'X', quantity: 1, unitPrice: 100, vatRate: 21, vatAfipCode: 2 }], 6)
+    ).toThrow(/no corresponde al código de IVA 2/);
+    expect(() => TaxCalculator.calculate([{ description: 'X', quantity: 1, unitPrice: 100, vatAfipCode: 7 }], 6)).toThrow(
+      /Código de IVA 7 inválido/
+    );
+  });
 });

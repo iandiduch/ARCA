@@ -34,8 +34,22 @@ describe('Configurador de Entorno (config.ts)', () => {
       NODE_ENV: 'production',
       API_KEY_MASTER: 'super-secret-production-master-key-12345678',
       ENCRYPTION_KEY: 'a'.repeat(64),
-      DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/arca_db'
+      DATABASE_URL: 'postgres://arca:secreto@db:5432/arca_db'
     });
     expect(validProd.success).toBe(true);
+  });
+
+  it('en producción rechaza claves maestras cortas, la base por defecto y claves de cifrado no hexadecimales', () => {
+    const base = {
+      NODE_ENV: 'production',
+      API_KEY_MASTER: 'super-secret-production-master-key-12345678',
+      ENCRYPTION_KEY: 'a'.repeat(64),
+      DATABASE_URL: 'postgres://arca:secreto@db:5432/arca_db'
+    };
+    expect(envSchema.safeParse({ ...base, API_KEY_MASTER: 'corta-pero-16chars' }).success).toBe(false);
+    expect(
+      envSchema.safeParse({ ...base, DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/arca_db' }).success
+    ).toBe(false);
+    expect(envSchema.safeParse({ ...base, ENCRYPTION_KEY: 'z'.repeat(64) }).success).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import { TraBuilder } from './tra-builder.js';
 import { CmsSigner } from './cms-signer.js';
 import { FiscalError, InfrastructureError } from '../../../../core/errors/app-error.js';
 import { logger } from '../../../../app/logger.js';
+import { withAdvisoryLock } from '../../../../core/security/advisory-lock.js';
 
 export interface WsaaCredentials {
   token: string;
@@ -20,7 +21,14 @@ export interface WsaaClientOptions {
   timeoutMs?: number | undefined;
 }
 
+// Margen de seguridad: reutilizar el TA sólo si le quedan al menos 15 minutos de vida
+const SAFETY_MARGIN_MS = 15 * 60 * 1000;
+
+/** WSAA rechaza el login porque ya emitió un TA vigente para ese certificado y servicio */
+export class WsaaAlreadyAuthenticatedError extends FiscalError {}
+
 export class WsaaClient {
+  private static readonly inflightRenewals = new Map<string, Promise<WsaaCredentials>>();
   private static readonly ENDPOINTS = {
     homologation: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms',
     production: 'https://wsaa.afip.gov.ar/ws/services/LoginCms'
@@ -37,9 +45,60 @@ export class WsaaClient {
   ): Promise<WsaaCredentials> {
     const environment = options?.environment ?? 'homologation';
     const service = options?.service ?? 'wsfe';
-    const db = getDatabase();
+    const cacheKey = `${fiscalIdentityId}:${service}:${environment}`;
 
     // 1. Revisar caché en base de datos
+    const cached = await this.findCachedTicket(fiscalIdentityId, service, environment);
+    if (cached && cached.expirationTime.getTime() > Date.now() + SAFETY_MARGIN_MS) {
+      return { ...cached, fromCache: true };
+    }
+
+    // 2. Una sola renovación a la vez por identidad/servicio/entorno: en el proceso (single-flight)
+    // y entre réplicas (bloqueo consultivo). WSAA rechaza un segundo login mientras el TA vigente no venza.
+    const inflight = this.inflightRenewals.get(cacheKey);
+    if (inflight) {
+      return inflight;
+    }
+
+    const renewal = withAdvisoryLock(
+      `wsaa:${cacheKey}`,
+      async () => {
+        const fresh = await this.findCachedTicket(fiscalIdentityId, service, environment);
+        if (fresh && fresh.expirationTime.getTime() > Date.now() + SAFETY_MARGIN_MS) {
+          return { ...fresh, fromCache: true };
+        }
+
+        try {
+          return await this.requestNewTicket(fiscalIdentityId, privateKeyPem, certificatePem, service, environment, options);
+        } catch (err) {
+          // WSAA todavía considera vigente el TA anterior: si lo tenemos y no venció, seguir usándolo
+          if (err instanceof WsaaAlreadyAuthenticatedError && fresh && fresh.expirationTime.getTime() > Date.now()) {
+            logger.warn({ fiscalIdentityId, service, environment }, 'WSAA informa un TA vigente; se reutiliza el ticket en caché');
+            return { ...fresh, fromCache: true };
+          }
+          throw err;
+        }
+      },
+      {
+        timeoutMs: (options?.timeoutMs ?? 15000) * 2,
+        busyMessage: 'Se está renovando el ticket de acceso de ARCA para este comercio. Reintente en unos segundos.'
+      }
+    );
+
+    this.inflightRenewals.set(cacheKey, renewal);
+    try {
+      return await renewal;
+    } finally {
+      this.inflightRenewals.delete(cacheKey);
+    }
+  }
+
+  private static async findCachedTicket(
+    fiscalIdentityId: string,
+    service: string,
+    environment: string
+  ): Promise<Omit<WsaaCredentials, 'fromCache'> | null> {
+    const db = getDatabase();
     const [cached] = await db
       .select()
       .from(wsaaAccessTickets)
@@ -52,18 +111,18 @@ export class WsaaClient {
       )
       .limit(1);
 
-    // Margen de seguridad: reutilizar sólo si le quedan al menos 15 minutos de vida
-    const SAFETY_MARGIN_MS = 15 * 60 * 1000;
-    if (cached && cached.expirationTime.getTime() > Date.now() + SAFETY_MARGIN_MS) {
-      return {
-        token: cached.token,
-        sign: cached.sign,
-        expirationTime: cached.expirationTime,
-        fromCache: true
-      };
-    }
+    return cached ? { token: cached.token, sign: cached.sign, expirationTime: cached.expirationTime } : null;
+  }
 
-    // 2. Si no hay ticket vigente, solicitar uno nuevo a WSAA
+  private static async requestNewTicket(
+    fiscalIdentityId: string,
+    privateKeyPem: string,
+    certificatePem: string,
+    service: string,
+    environment: 'homologation' | 'production',
+    options?: WsaaClientOptions
+  ): Promise<WsaaCredentials> {
+    const db = getDatabase();
     logger.info({ fiscalIdentityId, service, environment }, 'Solicitando nuevo Ticket de Acceso a WSAA');
 
     const { xml: traXml } = TraBuilder.build({ service });
@@ -164,6 +223,14 @@ export class WsaaClient {
 
     if (fault) {
       const faultString = fault.faultstring || fault.faultcode || 'Error desconocido de WSAA';
+      const faultText = `${String(fault.faultcode ?? '')} ${String(fault.faultstring ?? '')}`;
+      if (/alreadyAuthenticated|ya posee un TA/i.test(faultText)) {
+        throw new WsaaAlreadyAuthenticatedError(
+          'Error de autenticación WSAA: ARCA ya emitió un ticket de acceso vigente para este certificado y servicio',
+          undefined,
+          { rawFault: faultString }
+        );
+      }
       const friendlyMessage = this.mapWsaaError(faultString);
       throw new FiscalError(`Error de autenticación WSAA: ${friendlyMessage}`, undefined, { rawFault: faultString });
     }

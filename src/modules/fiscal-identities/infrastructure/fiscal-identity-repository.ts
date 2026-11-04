@@ -1,4 +1,4 @@
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, ne, and, desc, sql, isNull, isNotNull } from 'drizzle-orm';
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import {
   fiscalIdentities,
@@ -111,6 +111,9 @@ export class FiscalIdentityRepository {
     return created;
   }
 
+  /**
+   * Certificado vigente usado para firmar ante WSAA. Una solicitud CSR pendiente (sin certificado) nunca es la activa.
+   */
   public async getActiveCertificate(fiscalIdentityId: string): Promise<FiscalCertificate | null> {
     const db = getDatabase();
     const [found] = await db
@@ -119,7 +122,8 @@ export class FiscalIdentityRepository {
       .where(
         and(
           eq(fiscalCertificates.fiscalIdentityId, fiscalIdentityId),
-          eq(fiscalCertificates.active, true)
+          eq(fiscalCertificates.active, true),
+          isNotNull(fiscalCertificates.certificate)
         )
       )
       .orderBy(desc(fiscalCertificates.createdAt))
@@ -128,17 +132,53 @@ export class FiscalIdentityRepository {
     return found ?? null;
   }
 
+  /**
+   * Solicitudes CSR que todavía no recibieron su certificado, de la más reciente a la más antigua.
+   */
+  public async getPendingCertificateRequests(fiscalIdentityId: string): Promise<FiscalCertificate[]> {
+    const db = getDatabase();
+    return db
+      .select()
+      .from(fiscalCertificates)
+      .where(and(eq(fiscalCertificates.fiscalIdentityId, fiscalIdentityId), isNull(fiscalCertificates.certificate)))
+      .orderBy(desc(fiscalCertificates.createdAt));
+  }
+
+  /**
+   * Completa una solicitud CSR con el certificado emitido por ARCA y la convierte en el único certificado activo.
+   */
+  public async activateCertificate(
+    fiscalIdentityId: string,
+    certificateId: string,
+    data: Pick<NewFiscalCertificate, 'certificate' | 'certificateFingerprint' | 'validFrom' | 'validTo'>
+  ): Promise<FiscalCertificate> {
+    const db = getDatabase();
+    return db.transaction(async (tx) => {
+      await tx
+        .update(fiscalCertificates)
+        .set({ active: false })
+        .where(and(eq(fiscalCertificates.fiscalIdentityId, fiscalIdentityId), ne(fiscalCertificates.id, certificateId)));
+
+      const [updated] = await tx
+        .update(fiscalCertificates)
+        .set({ ...data, active: true })
+        .where(and(eq(fiscalCertificates.fiscalIdentityId, fiscalIdentityId), eq(fiscalCertificates.id, certificateId)))
+        .returning();
+      if (!updated) throw new Error('Fallo al activar certificado fiscal');
+      return updated;
+    });
+  }
+
   // Puntos de venta
   public async syncPointsOfSale(fiscalIdentityId: string, ptos: NewPointOfSale[]): Promise<PointOfSale[]> {
     const db = getDatabase();
     if (ptos.length === 0) return [];
 
-    // Desactivar previos o insertar
-    await db
-      .delete(pointsOfSale)
-      .where(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId));
-
-    return db.insert(pointsOfSale).values(ptos).returning();
+    // Reemplazo atómico: si el insert falla no se pierden los puntos de venta anteriores
+    return db.transaction(async (tx) => {
+      await tx.delete(pointsOfSale).where(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId));
+      return tx.insert(pointsOfSale).values(ptos).returning();
+    });
   }
 
   public async getPointsOfSale(fiscalIdentityId: string): Promise<PointOfSale[]> {
