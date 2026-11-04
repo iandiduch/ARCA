@@ -8,7 +8,7 @@ import { EncryptionService } from '../../../core/security/encryption.js';
 import { IdempotencyService } from '../../../core/security/idempotency-service.js';
 import { AuditService } from '../../audit/application/audit-service.js';
 import { FiscalLock } from '../../../core/security/fiscal-lock.js';
-import { isValidCuit } from '../../../core/fiscal/cuit-validator.js';
+import { cleanDocumentNumber, isValidCuit } from '../../../core/fiscal/cuit-validator.js';
 import { isValidIsoDate, isoDateToAfip, isoDateToArgentinaNoon } from '../../../core/fiscal/fiscal-dates.js';
 import type { Invoice } from '../../../infrastructure/database/schema/invoices.js';
 import type { FiscalIdentity } from '../../../infrastructure/database/schema/fiscal-identities.js';
@@ -96,7 +96,7 @@ export class InvoiceService {
     const calc = TaxCalculator.calculate(input.items, input.voucherType, pricesIncludeVat);
 
     const docType = input.customer?.docType ?? 99;
-    const docNumber = input.customer?.docNumber ?? (docType === 99 ? '0' : '');
+    const docNumber = this.normalizeDocNumber(input);
     const customerName = input.customer?.name ?? (docType === 99 ? 'Consumidor Final' : 'Cliente');
 
     const created = await this.invoiceRepo.createWithDetails(
@@ -269,7 +269,7 @@ export class InvoiceService {
     this.validateFiscalRules(input);
 
     const docType = input.customer?.docType ?? 99;
-    const docNumber = input.customer?.docNumber ? input.customer.docNumber.trim() : (docType === 99 ? '0' : '');
+    const docNumber = this.normalizeDocNumber(input);
     const customerName = input.customer?.name ?? (docType === 99 ? 'Consumidor Final' : 'Cliente');
     const voucherLetter = getVoucherLetter(input.voucherType);
     const concept = input.concept ?? 1;
@@ -799,6 +799,20 @@ export class InvoiceService {
     return new Date(Date.UTC(y, m, d, 23, 59, 59));
   }
 
+  /** Número de documento del receptor sólo con dígitos ("20-30123456-7" → "20301234567") */
+  private normalizeDocNumber(input: EmitInvoiceInput): string {
+    const docType = input.customer?.docType ?? 99;
+    const raw = input.customer?.docNumber;
+    if (raw === undefined || raw.trim() === '') {
+      return docType === 99 ? '0' : '';
+    }
+    // Sólo se toleran separadores habituales; cualquier otro carácter hace fallar la validación
+    if (!/^[\d\s.-]+$/.test(raw)) {
+      return raw;
+    }
+    return cleanDocumentNumber(raw) || (docType === 99 ? '0' : '');
+  }
+
   private validateFiscalRules(input: EmitInvoiceInput): void {
     if (!input.items || input.items.length === 0) {
       throw new ValidationError('El comprobante debe contener al menos un ítem');
@@ -811,7 +825,22 @@ export class InvoiceService {
     }
 
     const docType = input.customer?.docType ?? 99;
-    const docNumber = input.customer?.docNumber ? input.customer.docNumber.trim() : (docType === 99 ? '0' : '');
+    const docNumber = this.normalizeDocNumber(input);
+
+    // El número de documento viaja a ARCA dentro del XML: sólo dígitos
+    if (docType === 99) {
+      if (docNumber !== '0') {
+        throw new ValidationError('Para Consumidor Final (DocTipo 99) el número de documento debe ser 0');
+      }
+    } else if (!/^\d{1,11}$/.test(docNumber) || Number(docNumber) === 0) {
+      throw new ValidationError(`El número de documento del comprador "${input.customer?.docNumber ?? ''}" no es válido`);
+    }
+
+    for (const assoc of input.associatedVouchers ?? []) {
+      if (assoc.cuit !== undefined && !isValidCuit(assoc.cuit)) {
+        throw new ValidationError(`El CUIT del comprobante asociado "${assoc.cuit}" no es válido`);
+      }
+    }
 
     // Validación Factura A / NC A / ND A: receptor obligatorio con CUIT válido
     const voucherLetter = getVoucherLetter(input.voucherType);

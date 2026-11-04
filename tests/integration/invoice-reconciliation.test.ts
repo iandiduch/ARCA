@@ -350,5 +350,15 @@ describe('Conciliación de comprobantes interrumpidos y numeración fiscal', () 
 
     await db.update(fiscalIdentities).set({ status: 'CONNECTED' }).where(eq(fiscalIdentities.id, fiscalIdentityId));
   });
+
+  it('10. Rechaza números de documento con caracteres que no sean dígitos (inyección XML)', async () => {
+    const res = await emit({}, {
+      customer: { docType: 96, docNumber: '123</fev:DocNro><fev:ImpTotal>1', name: 'Atacante' }
+    });
+    expect(res.statusCode).toBe(400);
+
+    const resCf = await emit({}, { customer: { docType: 99, docNumber: '20301234567' } });
+    expect(resCf.statusCode).toBe(400);
+  });
 });
 
