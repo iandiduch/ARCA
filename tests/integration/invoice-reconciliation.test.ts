@@ -382,5 +382,27 @@ describe('Conciliación de comprobantes interrumpidos y numeración fiscal', () 
     expect(res.statusCode).toBe(200);
     expect(res.json().total).toBeGreaterThan(0);
   });
+
+  it('14. Condición IVA del receptor: se exige con CUIT en B/C y se valida para A', async () => {
+    const resMissing = await emit({}, { customer: { docType: 80, docNumber: '20301234567', name: 'Empresa' } });
+    expect(resMissing.statusCode).toBe(400);
+    expect(resMissing.json().message).toContain('taxCondition');
+
+    const resInvalidA = await emit({}, {
+      voucherType: 1,
+      customer: { docType: 80, docNumber: '20301234567', name: 'Empresa', taxCondition: 5 }
+    });
+    expect(resInvalidA.statusCode).toBe(400);
+
+    mockWsaa();
+    vi.spyOn(Wsfev1Client, 'getUltimoComprobante').mockResolvedValue(100);
+    vi.spyOn(Wsfev1Client, 'consultarComprobante').mockResolvedValue(notRegisteredInArca);
+    const solicitarSpy = vi.spyOn(Wsfev1Client, 'solicitarCae').mockResolvedValue(authorizedCae(101));
+    const resExento = await emit({}, {
+      customer: { docType: 80, docNumber: '20301234567', name: 'Fundación', taxCondition: 4 }
+    });
+    expect(resExento.statusCode).toBe(201);
+    expect(solicitarSpy.mock.calls[0]![1].detalle.condicionIvaReceptorId).toBe(4);
+  });
 });
 

@@ -71,6 +71,11 @@ export const PENDING_RECONCILIATION_CODE = 'ARCA_PENDING_RECONCILIATION';
 /** Estados con numeración asignada cuyo resultado en ARCA todavía no se conoce */
 const UNRESOLVED_STATUSES = ['PENDING', 'PENDING_RECONCILIATION'];
 
+/** Condiciones frente al IVA del receptor admitidas por WSFEv1 (FEParamGetCondicionIvaReceptor) */
+const RECEPTOR_IVA_CONDITIONS = [1, 4, 5, 6, 7, 8, 9, 10, 13, 15, 16];
+/** Condiciones admitidas para comprobantes clase A (RI y monotributistas) */
+const RECEPTOR_IVA_CONDITIONS_A = [1, 6, 13, 16];
+
 type ArcaEnvironment = 'homologation' | 'production';
 
 export class InvoiceService {
@@ -125,7 +130,7 @@ export class InvoiceService {
         customerDocType: docType,
         customerDocNumber: docNumber,
         customerName,
-        customerTaxCondition: input.customer?.taxCondition ?? (docType === 99 ? 5 : undefined),
+        customerTaxCondition: this.resolveReceptorIvaCondition(input),
         customerAddress: input.customer?.address,
         notes: input.notes,
         posSaleId: input.posSaleId,
@@ -336,7 +341,7 @@ export class InvoiceService {
         customerDocType: docType,
         customerDocNumber: docNumber,
         customerName,
-        customerTaxCondition: input.customer?.taxCondition ?? (docType === 99 ? 5 : undefined),
+        customerTaxCondition: this.resolveReceptorIvaCondition(input),
         customerAddress: input.customer?.address,
         notes: input.notes,
         posSaleId: input.posSaleId,
@@ -402,7 +407,7 @@ export class InvoiceService {
             fchVtoPago,
             monId: 'PES',
             monCotiz: 1,
-            condicionIvaReceptorId: draftInvoice.customerTaxCondition ?? (voucherLetter === 'A' ? 1 : 5),
+            condicionIvaReceptorId: this.resolveReceptorIvaCondition(input),
             cbtesAsoc: input.associatedVouchers?.map((a) => ({
               tipo: a.voucherType,
               ptoVta: a.pointOfSale,
@@ -803,6 +808,17 @@ export class InvoiceService {
     return new Date(Date.UTC(y, m, d, 23, 59, 59));
   }
 
+  /**
+   * Condición frente al IVA del receptor (CondicionIVAReceptorId, obligatoria en WSFEv1 según RG 5616).
+   * Sólo se infiere cuando es inequívoca; con receptor identificado por CUIT/CUIL/CDI en B o C debe informarse.
+   */
+  private resolveReceptorIvaCondition(input: EmitInvoiceInput): number {
+    const explicit = input.customer?.taxCondition;
+    if (explicit !== undefined) return explicit;
+    if (getVoucherLetter(input.voucherType) === 'A') return 1;
+    return 5; // Consumidor Final (DocTipo 99 / DNI); los demás casos los rechaza validateFiscalRules
+  }
+
   private async assertCustomerBelongsToTenant(tenantId: string, customerId: string | undefined): Promise<void> {
     if (customerId && !(await this.customerRepo.findById(tenantId, customerId))) {
       throw new NotFoundError(`Cliente con ID "${customerId}" no encontrado`);
@@ -854,6 +870,23 @@ export class InvoiceService {
 
     // Validación Factura A / NC A / ND A: receptor obligatorio con CUIT válido
     const voucherLetter = getVoucherLetter(input.voucherType);
+
+    const taxCondition = input.customer?.taxCondition;
+    if (taxCondition !== undefined && !RECEPTOR_IVA_CONDITIONS.includes(taxCondition)) {
+      throw new ValidationError(
+        `Condición frente al IVA del receptor ${taxCondition} inválida. Valores admitidos: ${RECEPTOR_IVA_CONDITIONS.join(', ')}`
+      );
+    }
+    if (voucherLetter === 'A' && taxCondition !== undefined && !RECEPTOR_IVA_CONDITIONS_A.includes(taxCondition)) {
+      throw new ValidationError(
+        `Los comprobantes "A" sólo admiten receptores con condición ${RECEPTOR_IVA_CONDITIONS_A.join(', ')} (recibido ${taxCondition})`
+      );
+    }
+    if (voucherLetter !== 'A' && [80, 86, 87].includes(docType) && taxCondition === undefined) {
+      throw new ValidationError(
+        'Con receptor identificado por CUIT/CUIL/CDI debe informarse customer.taxCondition (1=RI, 4=Exento, 5=Consumidor Final, 6=Monotributo, ...)'
+      );
+    }
     if (voucherLetter === 'A') {
       if (docType !== 80) {
         throw new ValidationError('Los comprobantes tipo "A" exigen identificar al comprador con CUIT (DocTipo 80)');
