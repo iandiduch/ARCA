@@ -37,3 +37,19 @@ export function isoDateToArgentinaNoon(value: string): Date {
   }
   return new Date(`${value}T12:00:00-03:00`);
 }
+
+/** Inicio del día calendario argentino (00:00:00.000 en Buenos Aires) */
+export function argentinaStartOfDay(value: string): Date {
+  if (!isValidIsoDate(value)) {
+    throw new Error(`Fecha inválida "${value}": se espera formato YYYY-MM-DD`);
+  }
+  return new Date(`${value}T00:00:00.000-03:00`);
+}
+
+/** Fin del día calendario argentino (23:59:59.999 en Buenos Aires), para filtros "hasta" inclusivos */
+export function argentinaEndOfDay(value: string): Date {
+  if (!isValidIsoDate(value)) {
+    throw new Error(`Fecha inválida "${value}": se espera formato YYYY-MM-DD`);
+  }
+  return new Date(`${value}T23:59:59.999-03:00`);
+}

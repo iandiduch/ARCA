@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
 import { ReportService } from '../application/report-service.js';
 import { authenticate, requireTenant } from '../../../core/security/auth-middleware.js';
+import { argentinaEndOfDay, argentinaStartOfDay } from '../../../core/fiscal/fiscal-dates.js';
 
 export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const reportService = new ReportService();
@@ -22,8 +23,8 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           'x-api-key': Type.String({ description: 'API Key del comercio' })
         }),
         querystring: Type.Object({
-          fromDate: Type.Optional(Type.String({ description: 'Fecha inicio (YYYY-MM-DD)' })),
-          toDate: Type.Optional(Type.String({ description: 'Fecha fin (YYYY-MM-DD)' })),
+          fromDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha inicio (YYYY-MM-DD, hora argentina)' })),
+          toDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha fin inclusiva (YYYY-MM-DD, hora argentina)' })),
           fiscalIdentityId: Type.Optional(Type.String({ format: 'uuid' })),
           pointOfSaleNumber: Type.Optional(Type.Integer()),
           voucherType: Type.Optional(Type.Integer())
@@ -36,8 +37,8 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
 
       const report = await reportService.getSalesReport(tenant.id, {
         ...rest,
-        fromDate: fromDate ? new Date(fromDate) : undefined,
-        toDate: toDate ? new Date(toDate) : undefined
+        fromDate: fromDate ? argentinaStartOfDay(fromDate) : undefined,
+        toDate: toDate ? argentinaEndOfDay(toDate) : undefined
       });
 
       return reply.send(report);
@@ -57,8 +58,8 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           'x-api-key': Type.String({ description: 'API Key del comercio' })
         }),
         querystring: Type.Object({
-          fromDate: Type.Optional(Type.String({ description: 'Fecha inicio (YYYY-MM-DD)' })),
-          toDate: Type.Optional(Type.String({ description: 'Fecha fin (YYYY-MM-DD)' })),
+          fromDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha inicio (YYYY-MM-DD, hora argentina)' })),
+          toDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha fin inclusiva (YYYY-MM-DD, hora argentina)' })),
           fiscalIdentityId: Type.Optional(Type.String({ format: 'uuid' })),
           pointOfSaleNumber: Type.Optional(Type.Integer()),
           format: Type.Optional(Type.Union([Type.Literal('json'), Type.Literal('csv')], { default: 'json' }))
@@ -70,8 +71,8 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       const { fromDate, toDate, format, ...rest } = request.query;
       const filters = {
         ...rest,
-        fromDate: fromDate ? new Date(fromDate) : undefined,
-        toDate: toDate ? new Date(toDate) : undefined
+        fromDate: fromDate ? argentinaStartOfDay(fromDate) : undefined,
+        toDate: toDate ? argentinaEndOfDay(toDate) : undefined
       };
 
       if (format === 'csv') {

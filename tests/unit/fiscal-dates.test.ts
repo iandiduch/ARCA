@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidIsoDate, isoDateToAfip, isoDateToArgentinaNoon } from '../../src/core/fiscal/fiscal-dates.js';
+import { argentinaEndOfDay, argentinaStartOfDay, isValidIsoDate, isoDateToAfip, isoDateToArgentinaNoon } from '../../src/core/fiscal/fiscal-dates.js';
 import { redactWsaaCredentials } from '../../src/modules/arca/infrastructure/wsfev1/wsfev1-client.js';
 
 describe('Fechas calendario para ARCA', () => {
@@ -20,6 +20,13 @@ describe('Fechas calendario para ARCA', () => {
     expect(isValidIsoDate('01/11/2026')).toBe(false);
     expect(isValidIsoDate('2024-02-29')).toBe(true);
     expect(() => isoDateToAfip('2026-13-01')).toThrow();
+  });
+});
+
+describe('Filtros por día calendario argentino', () => {
+  it('el filtro "hasta" incluye todo el día', () => {
+    expect(argentinaStartOfDay('2026-11-03').toISOString()).toBe('2026-11-03T03:00:00.000Z');
+    expect(argentinaEndOfDay('2026-11-03').toISOString()).toBe('2026-11-04T02:59:59.999Z');
   });
 });
 

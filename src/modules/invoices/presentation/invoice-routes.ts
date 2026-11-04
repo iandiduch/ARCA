@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { Type, type Static } from '@sinclair/typebox';
 import { InvoiceService } from '../application/invoice-service.js';
 import { authenticate, requireTenant } from '../../../core/security/auth-middleware.js';
+import { argentinaEndOfDay, argentinaStartOfDay } from '../../../core/fiscal/fiscal-dates.js';
 
 const CustomerInputSchema = Type.Optional(
   Type.Object({
@@ -150,8 +151,8 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           fiscalIdentityId: Type.Optional(Type.String({ format: 'uuid' })),
           voucherType: Type.Optional(Type.Integer()),
           pointOfSaleNumber: Type.Optional(Type.Integer()),
-          fromDate: Type.Optional(Type.String({ description: 'Fecha inicio (YYYY-MM-DD)' })),
-          toDate: Type.Optional(Type.String({ description: 'Fecha fin (YYYY-MM-DD)' })),
+          fromDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha inicio (YYYY-MM-DD, hora argentina)' })),
+          toDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha fin inclusiva (YYYY-MM-DD, hora argentina)' })),
           limit: Type.Optional(Type.Integer({ default: 50, minimum: 1, maximum: 100 })),
           offset: Type.Optional(Type.Integer({ default: 0, minimum: 0 }))
         })
@@ -163,8 +164,8 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
 
       const result = await invoiceService.listInvoices(tenant.id, {
         ...rest,
-        fromDate: fromDate ? new Date(fromDate) : undefined,
-        toDate: toDate ? new Date(toDate) : undefined
+        fromDate: fromDate ? argentinaStartOfDay(fromDate) : undefined,
+        toDate: toDate ? argentinaEndOfDay(toDate) : undefined
       });
 
       return reply.send(result);
