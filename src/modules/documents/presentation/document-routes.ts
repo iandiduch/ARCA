@@ -27,7 +27,7 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
@@ -65,7 +65,7 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
@@ -103,7 +103,7 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
@@ -144,7 +144,7 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Documentos e Impresión'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })

@@ -20,7 +20,7 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Reportes Fiscales'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         querystring: Type.Object({
           fromDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha inicio (YYYY-MM-DD, hora argentina)' })),
@@ -55,7 +55,7 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Reportes Fiscales'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         querystring: Type.Object({
           fromDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Fecha inicio (YYYY-MM-DD, hora argentina)' })),

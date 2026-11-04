@@ -19,7 +19,7 @@ export const taxpayerRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Padrón de Contribuyentes'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           cuit: Type.String({ minLength: 11, maxLength: 13, description: 'CUIT a consultar (con o sin guiones)' })

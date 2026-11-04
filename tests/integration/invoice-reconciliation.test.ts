@@ -372,5 +372,15 @@ describe('Conciliación de comprobantes interrumpidos y numeración fiscal', () 
     expect(res.statusCode).toBe(404);
     expect(res.json().message).toContain('Cliente');
   });
+
+  it('13. Acepta Authorization: Bearer en endpoints con schema de cabeceras', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/invoices?toDate=2099-12-31',
+      headers: { authorization: `Bearer ${tenantKey}` }
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().total).toBeGreaterThan(0);
+  });
 });
 

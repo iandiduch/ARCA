@@ -67,7 +67,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' }),
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' })),
           'x-idempotency-key': Type.Optional(Type.String({ description: 'Clave de idempotencia alternativa en cabecera' }))
         }),
         body: EmitInvoiceBodySchema
@@ -98,7 +98,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         body: EmitInvoiceBodySchema
       }
@@ -120,7 +120,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante a reconciliar' })
@@ -144,7 +144,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         querystring: Type.Object({
           status: Type.Optional(Type.String({ description: 'Filtrar por estado: DRAFT, AUTHORIZED, REJECTED, PENDING_RECONCILIATION' })),
@@ -182,7 +182,7 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Facturación'],
         security: [{ apiKeyAuth: [] }],
         headers: Type.Object({
-          'x-api-key': Type.String({ description: 'API Key del comercio' })
+          'x-api-key': Type.Optional(Type.String({ description: 'API Key del comercio' }))
         }),
         params: Type.Object({
           id: Type.String({ format: 'uuid', description: 'ID del comprobante' })
