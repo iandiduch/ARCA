@@ -43,8 +43,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       API_KEY_MASTER: ${API_KEY_MASTER:?Defina API_KEY_MASTER (openssl rand -hex 32)}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Defina ENCRYPTION_KEY (openssl rand -hex 32)}
-      # CORS restringido a los orígenes autorizados del POS (evitar '*' en producción)
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://pos.tucomercio.com}
+      # none = ningún navegador puede llamar a la API (el POS la llama desde su servidor). Para POS web:
+      # CORS_ORIGIN=https://pos.comercio1.com,https://*.midominio.com
+      CORS_ORIGIN: ${CORS_ORIGIN:-none}
       ARCA_DEFAULT_ENVIRONMENT: ${ARCA_DEFAULT_ENVIRONMENT:-production}
       # Vacío = permitido por NODE_ENV=production. En staging: ALLOW_ARCA_PRODUCTION=false
       ALLOW_ARCA_PRODUCTION: ${ALLOW_ARCA_PRODUCTION:-}

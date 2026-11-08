@@ -112,7 +112,7 @@ cp .env.example .env
 | `HOST` | String | `0.0.0.0` | Dirección de enlace de red (`0.0.0.0` para Docker/VPS). |
 | `NODE_ENV` | String | `development` | Entorno de ejecución: `development`, `test` o `production`. |
 | `LOG_LEVEL` | String | `info` | Nivel de logs de Pino: `fatal`, `error`, `warn`, `info`, `debug`. |
-| `CORS_ORIGIN` | String | `*` | Orígenes autorizados separados por coma (ej: `https://pos.midominio.com`). Con `*` no se habilitan credenciales. |
+| `CORS_ORIGIN` | String | `*` | Qué sitios web pueden llamar a la API **desde el navegador**. `none`: ninguno (recomendado si sólo la llaman servidores, p. ej. el backend del POS). Lista separada por coma para POS web: `https://pos.comercio1.com,https://*.midominio.com`. `*`: cualquiera, sin credenciales (sólo desarrollo). |
 | `DATABASE_URL` | URL | - | Cadena de conexión PostgreSQL (`postgres://user:pass@host:5432/db`). |
 | `DATABASE_MAX_CONNECTIONS` | Número | `10` | Conexiones máximas simultáneas en el pool de PostgreSQL. |
 | `DATABASE_STATEMENT_TIMEOUT_MS`| Número | `10000` | Límite máximo de espera para consultas SQL (10s por defecto). |

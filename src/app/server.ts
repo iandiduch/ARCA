@@ -47,6 +47,23 @@ export function parseCorsOrigin(pattern: string): string | RegExp {
 }
 
 /**
+ * Opciones de @fastify/cors a partir de CORS_ORIGIN:
+ * - "none": la API no emite cabeceras CORS, así que ningún navegador puede leer sus respuestas desde otro sitio.
+ *   Es lo indicado cuando sólo la llaman servidores (backend del POS, integraciones) y nunca un navegador.
+ * - "*": cualquier origen, sin credenciales.
+ * - lista separada por coma de orígenes exactos o con comodín de subdominio (https://*.midominio.com).
+ */
+export function corsOptions(corsOrigin: string) {
+  const value = corsOrigin.trim();
+  const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+  if (value.toLowerCase() === 'none') return { origin: false, methods };
+  // La API se autentica por cabecera (x-api-key / Bearer), no por cookies: nunca se habilitan credenciales
+  // con un origen comodín, que permitiría a cualquier sitio leer respuestas con la sesión del navegador.
+  if (value === '*') return { origin: '*', credentials: false, methods };
+  return { origin: value.split(',').filter((o) => o.trim()).map(parseCorsOrigin), credentials: true, methods };
+}
+
+/**
  * TRUST_PROXY: "false" (default), "true", un número de saltos (p. ej. "1") o una lista de IPs/CIDR separadas por coma.
  */
 export function parseTrustProxy(value: string): boolean | number | string {
@@ -118,19 +135,7 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   await app.register(helmet, {
     contentSecurityPolicy: config.NODE_ENV === 'production'
   });
-  // Configuración de CORS con restricción de orígenes y soporte de wildcards (*.midominio.com)
-  const allowedOrigins = config.CORS_ORIGIN === '*'
-    ? true
-    : config.CORS_ORIGIN.split(',').map(parseCorsOrigin);
-
-  // La API se autentica por cabecera (x-api-key / Bearer), no por cookies: nunca se habilitan credenciales
-  // con un origen comodín, que permitiría a cualquier sitio leer respuestas con la sesión del navegador.
-  const wildcardCors = config.CORS_ORIGIN === '*';
-  await app.register(cors, {
-    origin: wildcardCors ? '*' : allowedOrigins,
-    credentials: !wildcardCors,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-  });
+  await app.register(cors, corsOptions(config.CORS_ORIGIN));
 
   // Limitador de peticiones por inquilino / IP
   await app.register(rateLimit, {
