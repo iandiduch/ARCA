@@ -13,9 +13,14 @@ export function errorHandler(error: FastifyError | AppError | Error, request: Fa
       logger.warn({ err: error, reqId: request.id }, `[${error.code}] ${error.message}`);
     }
 
+    if ((error as { retryAfter?: number }).retryAfter !== undefined) {
+      reply.header('Retry-After', String((error as { retryAfter?: number }).retryAfter));
+    }
+
     return reply.status(error.statusCode).send({
       statusCode: error.statusCode,
       error: error.code,
+      code: error.code,
       message: error.message,
       details: error.details,
       timestamp

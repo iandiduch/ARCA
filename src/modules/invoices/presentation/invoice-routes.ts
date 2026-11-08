@@ -44,7 +44,7 @@ const EmitInvoiceBodySchema = Type.Object({
   customerId: Type.Optional(Type.String({ format: 'uuid', description: 'ID opcional del cliente registrado' })),
   customer: CustomerInputSchema,
   items: Type.Array(InvoiceItemInputSchema, { minItems: 1, description: 'Lista de ítems facturados' }),
-  associatedVouchers: Type.Optional(Type.Array(AssociatedVoucherInputSchema, { description: 'Comprobantes asociados (obligatorio para Notas de Crédito / Débito)' })),
+  associatedVouchers: Type.Optional(Type.Array(AssociatedVoucherInputSchema, { maxItems: 5, description: 'Comprobantes asociados (obligatorio para Notas de Crédito / Débito, máximo 5)' })),
   notes: Type.Optional(Type.String({ description: 'Observaciones comerciales en el comprobante' })),
   posSaleId: Type.Optional(Type.String({ description: 'UUID o identificador de venta en el POS' })),
   idempotencyKey: Type.Optional(Type.String({ description: 'Clave única para garantizar que no se duplique la emisión ante reintentos de red' }))
@@ -83,7 +83,12 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         idempotencyKey: body.idempotencyKey || idempotencyHeader
       };
 
-      const result = await invoiceService.emitInvoice(tenant.id, payload, request.authContext?.apiKeyId);
+      const result = await invoiceService.emitInvoice(
+        tenant.id,
+        payload,
+        request.authContext?.apiKeyId,
+        request.authContext?.role
+      );
       return reply.code(201).send(result);
     }
   );
@@ -105,7 +110,12 @@ export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     },
     async (request, reply) => {
       const tenant = request.tenant!;
-      const result = await invoiceService.createDraft(tenant.id, request.body, request.authContext?.apiKeyId);
+      const result = await invoiceService.createDraft(
+        tenant.id,
+        request.body,
+        request.authContext?.apiKeyId,
+        request.authContext?.role
+      );
       return reply.code(201).send(result);
     }
   );

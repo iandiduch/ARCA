@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, sql, gte, lte, inArray, isNotNull } from 'drizzle-orm';
+import { eq, and, asc, desc, sql, gte, lte, inArray, isNotNull, ne } from 'drizzle-orm';
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import {
   invoices,
@@ -272,5 +272,42 @@ export class InvoiceRepository {
     }
 
     return results;
+  }
+
+  /**
+   * Obtiene la suma total de Notas de Crédito autorizadas o en curso vinculadas a un comprobante específico.
+   * Incluye comprobantes en estado AUTHORIZED, PENDING y PENDING_RECONCILIATION para
+   * evitar sobre-acreditaciones concurrentes o durante contingencias de red.
+   */
+  public async getTotalCreditedForVoucher(
+    fiscalIdentityId: string,
+    associatedVoucherType: number,
+    pointOfSale: number,
+    voucherNumber: number,
+    excludeInvoiceId?: string
+  ): Promise<number> {
+    const db = getDatabase();
+    const conditions = [
+      eq(invoices.fiscalIdentityId, fiscalIdentityId),
+      inArray(invoices.status, ['AUTHORIZED', 'PENDING', 'PENDING_RECONCILIATION']),
+      inArray(invoices.voucherType, [3, 8, 13, 53]),
+      eq(invoiceAssociatedVouchers.associatedVoucherType, associatedVoucherType),
+      eq(invoiceAssociatedVouchers.pointOfSale, pointOfSale),
+      eq(invoiceAssociatedVouchers.voucherNumber, voucherNumber)
+    ];
+
+    if (excludeInvoiceId) {
+      conditions.push(ne(invoices.id, excludeInvoiceId));
+    }
+
+    const [result] = await db
+      .select({
+        total: sql<string>`coalesce(sum(${invoices.totalAmount}), 0)`
+      })
+      .from(invoiceAssociatedVouchers)
+      .innerJoin(invoices, eq(invoices.id, invoiceAssociatedVouchers.invoiceId))
+      .where(and(...conditions));
+
+    return Number(result?.total ?? 0);
   }
 }
