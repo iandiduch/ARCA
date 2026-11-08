@@ -26,9 +26,12 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
-# Instalar sólo dependencias de producción
+# Instalar sólo dependencias de producción, actualizar base Alpine y remover npm innecesario en runtime
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN apk upgrade --no-cache \
+  && npm ci --omit=dev \
+  && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Copiar artefactos compilados y migraciones
 COPY --from=builder /app/dist ./dist
