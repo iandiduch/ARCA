@@ -18,10 +18,12 @@ describe('Cifrado de Claves Privadas en Reposo (EncryptionService - AES-256-GCM)
     const secret = 'clave_secreta_arca';
     const encrypted = EncryptionService.encrypt(secret);
 
-    // Manipular ciphertext
+    // Manipular ciphertext garantizando que el byte cambie
+    const lastByte = encrypted.ciphertext.slice(-2);
+    const tamperedByte = lastByte === 'ff' ? '00' : 'ff';
     const tampered = {
       ...encrypted,
-      ciphertext: encrypted.ciphertext.slice(0, -2) + 'ff'
+      ciphertext: encrypted.ciphertext.slice(0, -2) + tamperedByte
     };
 
     expect(() => EncryptionService.decrypt(tampered)).toThrow();
