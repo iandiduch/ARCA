@@ -773,6 +773,21 @@ export class InvoiceService {
         entityId: draftInvoice.id
       });
 
+      // R8: una NC/ND sobre comprobantes de otro CUIT no tiene control de saldo local; queda trazada en auditoría
+      const thirdParty = (input.associatedVouchers ?? []).filter(
+        (a) => a.cuit && cleanDocumentNumber(a.cuit) !== cleanDocumentNumber(identity.cuit)
+      );
+      if (thirdParty.length > 0) {
+        await AuditService.record({
+          tenantId,
+          userId,
+          action: 'THIRD_PARTY_ASSOCIATED_VOUCHER_AUTHORIZED',
+          entityType: 'invoice',
+          entityId: draftInvoice.id,
+          payload: { voucherType: input.voucherType, totalAmount: calc.totalAmount, associated: thirdParty, role: userRole }
+        }).catch(() => {});
+      }
+
       const updated = await this.invoiceRepo.findById(tenantId, draftInvoice.id);
       return updated!;
     } else {
@@ -1348,6 +1363,11 @@ export class InvoiceService {
             'La emisión de notas de crédito asociadas a comprobantes de otro CUIT requiere permisos de administrador'
           );
         }
+        // R8: Alerta de auditoría para emisión de Notas de Crédito contra comprobantes de terceros
+        logger.warn(
+          { issuerCuit: identity.cuit, associatedCuit: assoc.cuit, userRole },
+          'Emisión de Nota de Crédito asociada a comprobante de CUIT de terceros autorizada bajo rol administrador'
+        );
         continue;
       }
 
