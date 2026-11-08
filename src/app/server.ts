@@ -188,17 +188,12 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   await app.register(reportRoutes);
   await app.register(taxpayerRoutes);
 
-  // Ruta raíz informativa
+  // Ruta raíz informativa segura (L8: no expone rutas internas ni entorno sin autenticación)
   app.get('/', async (_req, reply) => {
     return reply.send({
       name: 'ARCA Fiscal API',
-      version: '0.1.0',
-      environment: config.ARCA_DEFAULT_ENVIRONMENT,
-      documentation: docsEnabled ? '/documentation' : undefined,
-      health: {
-        liveness: '/health/live',
-        readiness: '/health/ready'
-      }
+      status: 'ok',
+      version: '0.1.0'
     });
   });
 
