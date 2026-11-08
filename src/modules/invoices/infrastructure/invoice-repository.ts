@@ -164,8 +164,51 @@ export class InvoiceRepository {
     const limit = filters.limit ?? 50;
     const offset = filters.offset ?? 0;
 
+    // L4: Excluir afipXmlRequest/afipXmlResponse del listado masivo para optimizar ancho de banda
     const data = await db
-      .select()
+      .select({
+        id: invoices.id,
+        tenantId: invoices.tenantId,
+        fiscalIdentityId: invoices.fiscalIdentityId,
+        pointOfSaleNumber: invoices.pointOfSaleNumber,
+        voucherType: invoices.voucherType,
+        voucherLetter: invoices.voucherLetter,
+        voucherNumber: invoices.voucherNumber,
+        concept: invoices.concept,
+        serviceDateFrom: invoices.serviceDateFrom,
+        serviceDateTo: invoices.serviceDateTo,
+        paymentDueDate: invoices.paymentDueDate,
+        issueDate: invoices.issueDate,
+        status: invoices.status,
+        cae: invoices.cae,
+        caeExpiresAt: invoices.caeExpiresAt,
+        totalAmount: invoices.totalAmount,
+        netTaxedAmount: invoices.netTaxedAmount,
+        netUntaxedAmount: invoices.netUntaxedAmount,
+        exemptAmount: invoices.exemptAmount,
+        vatAmount: invoices.vatAmount,
+        specialTaxesAmount: invoices.specialTaxesAmount,
+        currency: invoices.currency,
+        currencyRate: invoices.currencyRate,
+        customerId: invoices.customerId,
+        customerDocType: invoices.customerDocType,
+        customerDocNumber: invoices.customerDocNumber,
+        customerName: invoices.customerName,
+        customerTaxCondition: invoices.customerTaxCondition,
+        customerAddress: invoices.customerAddress,
+        notes: invoices.notes,
+        afipResult: invoices.afipResult,
+        afipXmlRequest: sql<string | null>`null`.as('afip_xml_request'),
+        afipXmlResponse: sql<string | null>`null`.as('afip_xml_response'),
+        afipErrors: invoices.afipErrors,
+        afipObservations: invoices.afipObservations,
+        afipEvents: invoices.afipEvents,
+        idempotencyKey: invoices.idempotencyKey,
+        posSaleId: invoices.posSaleId,
+        qrData: invoices.qrData,
+        createdAt: invoices.createdAt,
+        updatedAt: invoices.updatedAt
+      })
       .from(invoices)
       .where(whereClause)
       .orderBy(desc(invoices.createdAt))
