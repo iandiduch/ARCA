@@ -120,10 +120,10 @@ export class InvoiceService {
     }
 
     const ptos = await this.fiscalRepo.getPointsOfSale(identity.id);
-    const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber);
+    const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber && p.active);
     if (!ptoRecord) {
       throw new ValidationError(
-        `El punto de venta ${input.pointOfSaleNumber} no está configurado para la identidad fiscal ${identity.cuit}`
+        `El punto de venta ${input.pointOfSaleNumber} no está configurado o no se encuentra activo para la identidad fiscal ${identity.cuit}`
       );
     }
 
@@ -307,10 +307,10 @@ export class InvoiceService {
       const { identity } = await this.loadIdentityAndCertificate(tenantId, input.fiscalIdentityId);
 
       const ptos = await this.fiscalRepo.getPointsOfSale(identity.id);
-      const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber);
+      const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber && p.active);
       if (!ptoRecord) {
         throw new ValidationError(
-          `El punto de venta ${input.pointOfSaleNumber} no está configurado para la identidad fiscal ${identity.cuit}`
+          `El punto de venta ${input.pointOfSaleNumber} no está configurado o no se encuentra activo para la identidad fiscal ${identity.cuit}`
         );
       }
 
@@ -396,12 +396,12 @@ export class InvoiceService {
       );
     }
 
-    // B. Validar punto de venta
+    // B. Validar punto de venta activo
     const ptos = await this.fiscalRepo.getPointsOfSale(identity.id);
-    const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber);
+    const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber && p.active);
     if (!ptoRecord) {
       throw new ValidationError(
-        `El punto de venta ${input.pointOfSaleNumber} no está configurado para la identidad fiscal ${identity.cuit}`
+        `El punto de venta ${input.pointOfSaleNumber} no está configurado o no se encuentra activo para la identidad fiscal ${identity.cuit}`
       );
     }
 
