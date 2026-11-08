@@ -1354,7 +1354,8 @@ export class InvoiceService {
         throw new ValidationError(`El CUIT del comprobante asociado "${assoc.cuit}" no es válido`);
       }
 
-      const isThirdParty = Boolean(assoc.cuit && assoc.cuit !== identity.cuit);
+      // R9: Normalizar CUIT propio y del comprobante asociado para evitar rechazos por guiones
+      const isThirdParty = Boolean(assoc.cuit && cleanDocumentNumber(assoc.cuit) !== cleanDocumentNumber(identity.cuit));
 
       if (isThirdParty) {
         const normalizedRole = userRole?.toLowerCase();
@@ -1420,7 +1421,7 @@ export class InvoiceService {
     }
 
     for (const assoc of input.associatedVouchers) {
-      const isThirdParty = Boolean(assoc.cuit && assoc.cuit !== identity.cuit);
+      const isThirdParty = Boolean(assoc.cuit && cleanDocumentNumber(assoc.cuit) !== cleanDocumentNumber(identity.cuit));
       if (isThirdParty) continue;
 
       const original = await this.invoiceRepo.findBySequenceNumber(
