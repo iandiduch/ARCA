@@ -53,9 +53,9 @@ const EmitInvoiceBodySchema = Type.Object({
 export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const invoiceService = new InvoiceService();
 
-  // Todos los endpoints de comprobantes requieren autenticación de comercio
-  fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', requireTenant);
+  // Todos los endpoints de comprobantes requieren autenticación de comercio (L2: preValidation antes de schema validation)
+  fastify.addHook('preValidation', authenticate);
+  fastify.addHook('preValidation', requireTenant);
 
   // POST /api/v1/invoices - Emitir comprobante electrónico con CAE
   fastify.post(

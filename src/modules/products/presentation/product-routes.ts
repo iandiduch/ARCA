@@ -6,9 +6,9 @@ import { authenticate, requireTenant } from '../../../core/security/auth-middlew
 export const productRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const productService = new ProductService();
 
-  // Todos los endpoints de productos requieren un comercio autenticado
-  fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', requireTenant);
+  // Todos los endpoints de productos requieren un comercio autenticado (L2: preValidation antes de validación de schema)
+  fastify.addHook('preValidation', authenticate);
+  fastify.addHook('preValidation', requireTenant);
 
   // POST /api/v1/products - Crear producto
   fastify.post(

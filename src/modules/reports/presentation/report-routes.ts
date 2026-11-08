@@ -7,8 +7,8 @@ import { argentinaEndOfDay, argentinaStartOfDay } from '../../../core/fiscal/fis
 export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const reportService = new ReportService();
 
-  fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', requireTenant);
+  fastify.addHook('preValidation', authenticate);
+  fastify.addHook('preValidation', requireTenant);
 
   // GET /api/v1/reports/sales - Reporte de ventas y totales fiscales por período
   fastify.get(

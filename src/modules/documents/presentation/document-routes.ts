@@ -14,8 +14,8 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const fiscalRepo = new FiscalIdentityRepository();
   const emailService = new EmailService();
 
-  fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', requireTenant);
+  fastify.addHook('preValidation', authenticate);
+  fastify.addHook('preValidation', requireTenant);
 
   // GET /api/v1/invoices/:id/pdf - Descargar o visualizar PDF reglamentario
   fastify.get(

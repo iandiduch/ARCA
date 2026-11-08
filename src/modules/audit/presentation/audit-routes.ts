@@ -7,7 +7,7 @@ export const auditRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     '/api/v1/audit-logs',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Consulta el historial de auditoría de acciones sensibles del comercio autenticado',
         tags: ['Audit'],
