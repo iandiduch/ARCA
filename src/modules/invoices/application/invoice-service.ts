@@ -1,6 +1,7 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, lte, asc, inArray } from 'drizzle-orm';
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import { idempotencyKeys } from '../../../infrastructure/database/schema/idempotency-keys.js';
+import { invoices, type Invoice } from '../../../infrastructure/database/schema/invoices.js';
 import { InvoiceRepository, type FullInvoice, type InvoiceListFilters } from '../infrastructure/invoice-repository.js';
 import { FiscalIdentityRepository } from '../../fiscal-identities/infrastructure/fiscal-identity-repository.js';
 import { CustomerRepository } from '../../customers/infrastructure/customer-repository.js';
@@ -15,7 +16,6 @@ import { FiscalLock } from '../../../core/security/fiscal-lock.js';
 import { AssociatedVoucherLock, type AssociatedVoucherRef } from '../../../core/security/voucher-lock.js';
 import { cleanDocumentNumber, isValidCuit } from '../../../core/fiscal/cuit-validator.js';
 import { isValidIsoDate, isoDateToAfip, isoDateToArgentinaNoon } from '../../../core/fiscal/fiscal-dates.js';
-import type { Invoice } from '../../../infrastructure/database/schema/invoices.js';
 import type { FiscalIdentity } from '../../../infrastructure/database/schema/fiscal-identities.js';
 import type { FiscalCertificate } from '../../../infrastructure/database/schema/fiscal-certificates.js';
 import type { WsfeAuth } from '../../arca/infrastructure/wsfev1/wsfev1-client.js';
@@ -596,10 +596,16 @@ export class InvoiceService {
         // Manejo de corte de conexión o timeout durante la emisión: NO reintentar a ciegas.
         // Marcamos el comprobante como PENDING_RECONCILIATION para que sea conciliado sin duplicar numeración.
         // Si este update también falla, el registro queda en PENDING y se concilia en la próxima emisión de la secuencia.
+        // M3: Preservar notes intacto (observaciones comerciales del cliente) y almacenar el error en afipErrors
         await this.invoiceRepo
           .update(tenantId, draftInvoice.id, {
             status: 'PENDING_RECONCILIATION',
-            notes: `Interrupción en la comunicación con ARCA: ${err instanceof Error ? err.message : String(err)}`
+            afipErrors: [
+              {
+                code: 'COMMUNICATION_TIMEOUT',
+                message: `Interrupción en la comunicación con ARCA: ${err instanceof Error ? err.message : String(err)}`
+              }
+            ]
           })
           .catch((updateErr: unknown) => {
             logger.error({ invoiceId: draftInvoice.id, err: updateErr }, 'No se pudo marcar el comprobante como PENDING_RECONCILIATION');
@@ -647,8 +653,14 @@ export class InvoiceService {
               status: 'REJECTED',
               voucherNumber: null,
               afipResult: 'R',
-              afipErrors: caeResponse.errores,
-              notes: `Rechazado por numeración desincronizada (ARCA 10016) y fallo al consultar último comprobante: ${refreshErr instanceof Error ? refreshErr.message : String(refreshErr)}`
+              // M3: el motivo va en afipErrors; notes son las observaciones comerciales del POS
+              afipErrors: [
+                ...caeResponse.errores,
+                {
+                  code: 'SEQUENCE_REFRESH_FAILED',
+                  message: `Rechazado por numeración desincronizada (ARCA 10016) y fallo al consultar último comprobante: ${refreshErr instanceof Error ? refreshErr.message : String(refreshErr)}`
+                }
+              ]
             })
             .catch(() => {});
           throw new FiscalError(
@@ -924,7 +936,12 @@ export class InvoiceService {
         await this.invoiceRepo.update(invoice.tenantId, invoice.id, {
           status: 'REJECTED',
           voucherNumber: null,
-          notes: `Reconciliación rechazada por discordancia con ARCA: número ${invoice.pointOfSaleNumber}-${voucherNumber} pertenece a otro comprobante (${mismatchReason})`
+          afipErrors: [
+            {
+              code: FOREIGN_VOUCHER_CODE,
+              message: `Reconciliación rechazada por discordancia con ARCA: número ${invoice.pointOfSaleNumber}-${voucherNumber} pertenece a otro comprobante (${mismatchReason})`
+            }
+          ]
         });
 
         await AuditService.record({
@@ -973,6 +990,7 @@ export class InvoiceService {
         cae: consult.cae,
         caeExpiresAt,
         afipResult: 'A',
+        afipErrors: null, // el corte de comunicación ya quedó resuelto
         afipObservations: consult.observaciones,
         qrData
       });
@@ -1008,7 +1026,9 @@ export class InvoiceService {
     await this.invoiceRepo.update(invoice.tenantId, invoice.id, {
       status: 'CANCELLED',
       voucherNumber: null,
-      notes: `Comprobante no registrado en ARCA tras consulta de reconciliación (número ${voucherNumber} liberado)`
+      afipErrors: [
+        { code: 'NOT_REGISTERED_IN_ARCA', message: `Comprobante no registrado en ARCA tras consulta de reconciliación (número ${voucherNumber} liberado)` }
+      ]
     });
 
     await AuditService.record({
@@ -1390,6 +1410,46 @@ export class InvoiceService {
   ): Promise<void> {
     await this.validateAssociatedVouchersExistence(identity, input, userRole);
     await this.validateAssociatedVouchersBalance(identity, input, calcTotalAmount);
+  }
+
+  /**
+   * M3: Conciliación automática en segundo plano de comprobantes en PENDING_RECONCILIATION
+   */
+  public async reconcileAllPending(): Promise<{ reconciled: number; failed: number }> {
+    const db = getDatabase();
+    // Margen mayor que la ventana en que ARCA puede procesar nuestra solicitud (OWN_PROCESSING_WINDOW_AFTER_MS):
+    // conciliar antes podría dar "no registrado" (602) para un comprobante que ARCA todavía está procesando.
+    const olderThan = new Date(Date.now() - 5 * 60_000);
+    const pendingList = await db
+      .select({ id: invoices.id, tenantId: invoices.tenantId })
+      .from(invoices)
+      .where(
+        and(
+          // PENDING viejos = emisiones cuyo proceso murió sin registrar el resultado
+          inArray(invoices.status, UNRESOLVED_STATUSES),
+          lte(invoices.createdAt, olderThan),
+          lte(invoices.updatedAt, olderThan)
+        )
+      )
+      // Los que fallaron recién (updatedAt actualizado abajo) van al final: no acaparan el lote
+      .orderBy(asc(invoices.updatedAt))
+      .limit(20);
+
+    let reconciled = 0;
+    let failed = 0;
+
+    for (const item of pendingList) {
+      try {
+        await this.reconcileInvoice(item.tenantId, item.id);
+        reconciled++;
+      } catch (err) {
+        failed++;
+        logger.warn({ invoiceId: item.id, err }, 'Fallo en conciliación automática de comprobante pendiente');
+        await db.update(invoices).set({ updatedAt: new Date() }).where(eq(invoices.id, item.id)).catch(() => {});
+      }
+    }
+
+    return { reconciled, failed };
   }
 }
 
