@@ -7,20 +7,20 @@ import { argentinaEndOfDay, argentinaStartOfDay } from '../../../core/fiscal/fis
 const CustomerInputSchema = Type.Optional(
   Type.Object({
     docType: Type.Optional(Type.Integer({ description: 'Código AFIP: 80=CUIT, 96=DNI, 99=Consumidor Final', default: 99 })),
-    docNumber: Type.Optional(Type.String({ description: 'Número de documento o CUIT (sin guiones)', default: '0' })),
-    name: Type.Optional(Type.String({ description: 'Nombre o Razón Social del cliente', default: 'Consumidor Final' })),
+    docNumber: Type.Optional(Type.String({ maxLength: 20, description: 'Número de documento o CUIT (sin guiones)', default: '0' })),
+    name: Type.Optional(Type.String({ maxLength: 255, description: 'Nombre o Razón Social del cliente', default: 'Consumidor Final' })),
     taxCondition: Type.Optional(Type.Integer({ description: '1=Resp. Inscripto, 5=Consumidor Final, 6=Monotributo, 4=Exento' })),
-    address: Type.Optional(Type.String({ description: 'Domicilio fiscal o comercial' }))
+    address: Type.Optional(Type.String({ maxLength: 255, description: 'Domicilio fiscal o comercial' }))
   })
 );
 
 const InvoiceItemInputSchema = Type.Object({
   productId: Type.Optional(Type.String({ format: 'uuid', description: 'ID opcional del catálogo de productos' })),
-  internalCode: Type.Optional(Type.String({ description: 'Código interno o SKU del producto en el POS' })),
-  description: Type.String({ minLength: 1, description: 'Descripción del ítem o servicio' }),
-  quantity: Type.Number({ minimum: 0.0001, description: 'Cantidad vendida' }),
-  unitPrice: Type.Number({ minimum: 0, description: 'Precio unitario' }),
-  discount: Type.Optional(Type.Number({ minimum: 0, default: 0, description: 'Descuento aplicado al ítem' })),
+  internalCode: Type.Optional(Type.String({ maxLength: 100, description: 'Código interno o SKU del producto en el POS' })),
+  description: Type.String({ minLength: 1, maxLength: 255, description: 'Descripción del ítem o servicio' }),
+  quantity: Type.Number({ minimum: 0.0001, maximum: 99999999, description: 'Cantidad vendida (numeric(12,4))' }),
+  unitPrice: Type.Number({ minimum: 0, maximum: 9999999999, description: 'Precio unitario (numeric(14,4))' }),
+  discount: Type.Optional(Type.Number({ minimum: 0, maximum: 9999999999, default: 0, description: 'Descuento aplicado al ítem' })),
   vatRate: Type.Optional(Type.Number({ description: 'Alícuota de IVA (0, 2.5, 5, 10.5, 21, 27). Por defecto 21, o la del vatAfipCode' })),
   vatAfipCode: Type.Optional(Type.Integer({ description: 'Código AFIP de alícuota (1=No Gravado, 2=Exento, 3=0%, 4=10.5%, 5=21%, 6=27%, 8=5%, 9=2.5%)' }))
 });
@@ -29,7 +29,7 @@ const AssociatedVoucherInputSchema = Type.Object({
   voucherType: Type.Integer({ description: 'Tipo de comprobante original (1=Factura A, 6=Factura B, etc.)' }),
   pointOfSale: Type.Integer({ minimum: 1, maximum: 99999, description: 'Punto de venta del comprobante original' }),
   voucherNumber: Type.Integer({ minimum: 1, description: 'Número del comprobante original' }),
-  cuit: Type.Optional(Type.String({ description: 'CUIT emisor del comprobante original (opcional si es del mismo comercio)' }))
+  cuit: Type.Optional(Type.String({ maxLength: 20, description: 'CUIT emisor del comprobante original (opcional si es del mismo comercio)' }))
 });
 
 const EmitInvoiceBodySchema = Type.Object({
@@ -43,11 +43,11 @@ const EmitInvoiceBodySchema = Type.Object({
   pricesIncludeVat: Type.Optional(Type.Boolean({ default: true, description: 'true si unitPrice incluye IVA (POS minorista), false si es precio neto' })),
   customerId: Type.Optional(Type.String({ format: 'uuid', description: 'ID opcional del cliente registrado' })),
   customer: CustomerInputSchema,
-  items: Type.Array(InvoiceItemInputSchema, { minItems: 1, description: 'Lista de ítems facturados' }),
+  items: Type.Array(InvoiceItemInputSchema, { minItems: 1, maxItems: 500, description: 'Lista de ítems facturados (máximo 500)' }),
   associatedVouchers: Type.Optional(Type.Array(AssociatedVoucherInputSchema, { maxItems: 5, description: 'Comprobantes asociados (obligatorio para Notas de Crédito / Débito, máximo 5)' })),
-  notes: Type.Optional(Type.String({ description: 'Observaciones comerciales en el comprobante' })),
-  posSaleId: Type.Optional(Type.String({ description: 'UUID o identificador de venta en el POS' })),
-  idempotencyKey: Type.Optional(Type.String({ description: 'Clave única para garantizar que no se duplique la emisión ante reintentos de red' }))
+  notes: Type.Optional(Type.String({ maxLength: 1000, description: 'Observaciones comerciales en el comprobante (máximo 1000 caracteres)' })),
+  posSaleId: Type.Optional(Type.String({ maxLength: 100, description: 'UUID o identificador de venta en el POS' })),
+  idempotencyKey: Type.Optional(Type.String({ maxLength: 255, description: 'Clave única para garantizar que no se duplique la emisión ante reintentos de red' }))
 });
 
 export const invoiceRoutes: FastifyPluginAsyncTypebox = async (fastify) => {

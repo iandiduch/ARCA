@@ -1,6 +1,9 @@
 import { resolveItemVat, requiresVatBreakdown } from '../../../core/fiscal/tax-catalogs.js';
 import { ValidationError } from '../../../core/errors/app-error.js';
 
+/** Máximo importe representable en las columnas numeric(14,2) de comprobantes, ítems y subtotales */
+export const MAX_VOUCHER_AMOUNT = 999_999_999_999.99;
+
 export interface InvoiceItemInput {
   productId?: string | undefined;
   internalCode?: string | undefined;
@@ -190,6 +193,13 @@ export class TaxCalculator {
     if (totalAmount <= 0) {
       throw new ValidationError(
         `El importe total del comprobante debe ser mayor a cero ($${totalAmount.toFixed(2)})`
+      );
+    }
+
+    // Las columnas de importes son numeric(14,2): un total mayor desborda la base (y ARCA no lo aceptaría)
+    if (totalAmount > MAX_VOUCHER_AMOUNT) {
+      throw new ValidationError(
+        `El importe total del comprobante ($${totalAmount.toFixed(2)}) supera el máximo admitido ($${MAX_VOUCHER_AMOUNT.toFixed(2)})`
       );
     }
 

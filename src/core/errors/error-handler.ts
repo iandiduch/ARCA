@@ -53,6 +53,20 @@ export function errorHandler(error: FastifyError | AppError | Error, request: Fa
     });
   }
 
+  // Caso 3b: Errores de sintaxis/desbordamiento de Postgres provocados por input (M7: 22003 = desbordamiento numérico, 22021 = byte nulo)
+  // Drizzle envuelve el error del driver (DrizzleQueryError): el código SQLSTATE viene en `cause`
+  const pgCode = (error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code;
+  if (pgCode === '22003' || pgCode === '22021' || pgCode === '22P02') {
+    logger.warn({ err: error, reqId: request.id }, `[INPUT_SYNTAX_ERROR] Error de datos Postgres (${pgCode}): ${error.message}`);
+    return reply.status(400).send({
+      statusCode: 400,
+      error: 'BAD_REQUEST',
+      code: 'INPUT_SYNTAX_ERROR',
+      message: 'Los datos enviados contienen caracteres inválidos o valores numéricos fuera del rango permitido.',
+      timestamp
+    });
+  }
+
   // Caso 4: Errores no controlados (500)
   logger.error({ err: error, reqId: request.id }, 'Error no controlado en el servidor');
   return reply.status(500).send({

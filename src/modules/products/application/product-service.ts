@@ -42,6 +42,9 @@ export class ProductService {
   constructor(private readonly productRepo = new ProductRepository()) {}
 
   public async createProduct(tenantId: string, input: CreateProductInput, creatorId?: string): Promise<Product> {
+    if (input.metadata && JSON.stringify(input.metadata).length > 16384) {
+      throw new ValidationError('El campo metadata no puede superar los 16 KB');
+    }
     if (input.salePrice < 0) {
       throw new ValidationError('El precio de venta no puede ser negativo');
     }
@@ -120,7 +123,12 @@ export class ProductService {
     if (input.barcode !== undefined) updateData.barcode = input.barcode ? input.barcode.trim() : null;
     if (input.conceptType !== undefined) updateData.conceptType = input.conceptType;
     if (input.active !== undefined) updateData.active = input.active;
-    if (input.metadata !== undefined) updateData.metadata = input.metadata;
+    if (input.metadata !== undefined) {
+      if (input.metadata && JSON.stringify(input.metadata).length > 16384) {
+        throw new ValidationError('El campo metadata no puede superar los 16 KB');
+      }
+      updateData.metadata = input.metadata;
+    }
 
     if (input.costPrice !== undefined) {
       if (input.costPrice < 0) throw new ValidationError('El precio de costo no puede ser negativo');

@@ -84,6 +84,36 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
     return errorHandler(error as Error, request, reply);
   });
 
+  // M7: Rechazar bytes nulos (\u0000 / %00) en URL, queries y body que Postgres rechaza con 22021
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.url.includes('%00') || request.url.includes('\u0000')) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'BAD_REQUEST',
+        code: 'INVALID_INPUT',
+        message: 'La URL o parámetros de la petición contienen caracteres nulos no permitidos.'
+      });
+    }
+  });
+
+  app.addHook('preValidation', async (request, reply) => {
+    if (request.body && typeof request.body === 'object') {
+      try {
+        const bodyStr = JSON.stringify(request.body);
+        if (bodyStr.includes('\\u0000') || bodyStr.includes('\u0000')) {
+          return reply.status(400).send({
+            statusCode: 400,
+            error: 'BAD_REQUEST',
+            code: 'INVALID_INPUT',
+            message: 'El cuerpo de la petición contiene caracteres nulos no permitidos.'
+          });
+        }
+      } catch {
+        // noop
+      }
+    }
+  });
+
   // Seguridad y cabeceras
   await app.register(helmet, {
     contentSecurityPolicy: config.NODE_ENV === 'production'
