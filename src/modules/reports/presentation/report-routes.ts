@@ -3,6 +3,29 @@ import { Type } from '@sinclair/typebox';
 import { ReportService } from '../application/report-service.js';
 import { authenticate, requireTenant } from '../../../core/security/auth-middleware.js';
 import { argentinaEndOfDay, argentinaStartOfDay } from '../../../core/fiscal/fiscal-dates.js';
+import { ValidationError } from '../../../core/errors/app-error.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Rango por defecto cuando falta fromDate: últimos 90 días hasta toDate (o ahora) */
+const DEFAULT_RANGE_DAYS = 90;
+/** Rango máximo consultable, se omitan o no las fechas */
+const MAX_RANGE_DAYS = 366;
+
+/**
+ * Resuelve SIEMPRE un rango acotado (M2/M10): sin fechas, los últimos 90 días; con una sola, se completa la otra;
+ * y en todos los casos el rango no puede superar 366 días.
+ */
+function resolveReportRange(fromDate: string | undefined, toDate: string | undefined): { fromDate: Date; toDate: Date } {
+  const to = toDate ? argentinaEndOfDay(toDate) : new Date();
+  const from = fromDate ? argentinaStartOfDay(fromDate) : new Date(to.getTime() - DEFAULT_RANGE_DAYS * DAY_MS);
+  if (to.getTime() < from.getTime()) {
+    throw new ValidationError('La fecha toDate no puede ser anterior a fromDate');
+  }
+  if (to.getTime() - from.getTime() > MAX_RANGE_DAYS * DAY_MS) {
+    throw new ValidationError(`El rango máximo de consulta permitido es de ${MAX_RANGE_DAYS} días (indique fromDate y toDate)`);
+  }
+  return { fromDate: from, toDate: to };
+}
 
 export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const reportService = new ReportService();
@@ -35,11 +58,9 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       const tenant = request.tenant!;
       const { fromDate, toDate, ...rest } = request.query;
 
-      const report = await reportService.getSalesReport(tenant.id, {
-        ...rest,
-        fromDate: fromDate ? argentinaStartOfDay(fromDate) : undefined,
-        toDate: toDate ? argentinaEndOfDay(toDate) : undefined
-      });
+      const range = resolveReportRange(fromDate, toDate);
+
+      const report = await reportService.getSalesReport(tenant.id, { ...rest, ...range });
 
       return reply.send(report);
     }
@@ -69,11 +90,10 @@ export const reportRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     async (request, reply) => {
       const tenant = request.tenant!;
       const { fromDate, toDate, format, ...rest } = request.query;
-      const filters = {
-        ...rest,
-        fromDate: fromDate ? argentinaStartOfDay(fromDate) : undefined,
-        toDate: toDate ? argentinaEndOfDay(toDate) : undefined
-      };
+
+      const range = resolveReportRange(fromDate, toDate);
+
+      const filters = { ...rest, ...range };
 
       if (format === 'csv') {
         const csvContent = await reportService.getVatSalesLedgerCsv(tenant.id, filters);

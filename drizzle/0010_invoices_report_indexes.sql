@@ -1,0 +1,1 @@
+CREATE INDEX "invoices_tenant_status_created_at_idx" ON "invoices" USING btree ("tenant_id","status","created_at");
