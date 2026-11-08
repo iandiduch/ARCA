@@ -1,4 +1,4 @@
-import { pgTable, uuid, numeric, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, index, uuid, numeric, integer, timestamp } from 'drizzle-orm/pg-core';
 import { invoices } from './invoices.js';
 
 export const invoiceVatSubtotals = pgTable('invoice_vat_subtotals', {
@@ -11,7 +11,10 @@ export const invoiceVatSubtotals = pgTable('invoice_vat_subtotals', {
   baseAmount: numeric('base_amount', { precision: 14, scale: 2 }).notNull(),
   vatAmount: numeric('vat_amount', { precision: 14, scale: 2 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
-});
+},
+  // Toda lectura de un comprobante busca sus filas por invoice_id: sin índice es un seq scan de la tabla entera
+  (table) => [index('invoice_vat_subtotals_invoice_id_idx').on(table.invoiceId)]
+);
 
 export type InvoiceVatSubtotal = typeof invoiceVatSubtotals.$inferSelect;
 export type NewInvoiceVatSubtotal = typeof invoiceVatSubtotals.$inferInsert;

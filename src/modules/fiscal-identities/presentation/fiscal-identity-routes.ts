@@ -11,7 +11,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.get(
     '/api/v1/arca/dummy',
     {
-      preHandler: [authenticate],
+      preValidation: [authenticate],
       schema: {
         description: 'Verifica la disponibilidad en tiempo real de los servidores de ARCA (FEDummy)',
         tags: ['ARCA'],
@@ -44,7 +44,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.post(
     '/api/v1/fiscal-identities',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Registra un CUIT o identidad fiscal para un comercio (Paso 1 del asistente)',
         tags: ['Fiscal Identities'],
@@ -106,7 +106,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.get(
     '/api/v1/fiscal-identities',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Lista las identidades fiscales configuradas para el comercio',
         tags: ['Fiscal Identities'],
@@ -156,7 +156,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.patch(
     '/api/v1/fiscal-identities/:id',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Actualiza los datos de la identidad fiscal (razón social, nombre de fantasía, domicilio, condición IVA)',
         tags: ['Fiscal Identities'],
@@ -214,7 +214,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.get(
     '/api/v1/fiscal-identities/:id/status',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Consulta el estado detallado de la conexión con ARCA y pasos pendientes',
         tags: ['Fiscal Identities'],
@@ -264,7 +264,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.post(
     '/api/v1/fiscal-identities/:id/certificate-requests',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Genera automáticamente la clave RSA 2048 y el CSR para tramitar en ARCA (Paso 2)',
         tags: ['Fiscal Identities'],
@@ -297,7 +297,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.post(
     '/api/v1/fiscal-identities/:id/certificates',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Carga el certificado X.509 público emitido por ARCA para validar y activar (Paso 4)',
         tags: ['Fiscal Identities'],
@@ -348,7 +348,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.post(
     '/api/v1/fiscal-identities/:id/connection-tests',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Prueba la conexión real contra WSAA y WSFEv1 detectando puntos de venta (Paso 5)',
         tags: ['Fiscal Identities'],
@@ -394,7 +394,7 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
   fastify.delete(
     '/api/v1/fiscal-identities/:id',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Elimina una identidad fiscal del comercio (bloqueado si ya emitió comprobantes)',
         tags: ['Fiscal Identities'],

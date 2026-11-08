@@ -1,4 +1,8 @@
 import { resolveItemVat, requiresVatBreakdown } from '../../../core/fiscal/tax-catalogs.js';
+import { ValidationError } from '../../../core/errors/app-error.js';
+
+/** Máximo importe representable en las columnas numeric(14,2) de comprobantes, ítems y subtotales */
+export const MAX_VOUCHER_AMOUNT = 999_999_999_999.99;
 
 export interface InvoiceItemInput {
   productId?: string | undefined;
@@ -66,9 +70,27 @@ export class TaxCalculator {
     let totalVatAmount = 0;
 
     for (const item of items) {
+      if (item.unitPrice < 0) {
+        throw new ValidationError(`El precio unitario no puede ser negativo en "${item.description}"`);
+      }
+      if (item.quantity <= 0) {
+        throw new ValidationError(`La cantidad vendida debe ser mayor a cero en "${item.description}"`);
+      }
+      if (item.discount !== undefined && item.discount < 0) {
+        throw new ValidationError(`El descuento no puede ser negativo en "${item.description}"`);
+      }
+
       const quantity = Math.max(0.0001, item.quantity);
       const unitPrice = Math.max(0, item.unitPrice);
       const discount = Math.max(0, item.discount ?? 0);
+      const lineGross = this.round2(quantity * unitPrice);
+
+      if (discount > lineGross + 0.0001) {
+        throw new ValidationError(
+          `El descuento ($${discount}) no puede superar el importe del ítem ($${lineGross}) en "${item.description}"`
+        );
+      }
+
       const { rate: vatRate, afipCode: vatAfipCode } = resolveItemVat(item.vatRate, item.vatAfipCode);
 
       let netSubtotal: number;
@@ -95,6 +117,12 @@ export class TaxCalculator {
         netSubtotal = this.round2(quantity * unitPrice - discount);
         vatSubtotal = vatRate > 0 ? this.round2(netSubtotal * (vatRate / 100)) : 0;
         totalSubtotal = this.round2(netSubtotal + vatSubtotal);
+      }
+
+      if (totalSubtotal < 0) {
+        throw new ValidationError(
+          `El subtotal del ítem "${item.description}" no puede ser negativo ($${totalSubtotal})`
+        );
       }
 
       calculatedItems.push({
@@ -160,6 +188,19 @@ export class TaxCalculator {
     if (Math.abs(totalAmount - expectedSum) > 0.001) {
       // Ajuste de centavo por redondeo si difiere por 1 centavo
       totalAmount = expectedSum;
+    }
+
+    if (totalAmount <= 0) {
+      throw new ValidationError(
+        `El importe total del comprobante debe ser mayor a cero ($${totalAmount.toFixed(2)})`
+      );
+    }
+
+    // Las columnas de importes son numeric(14,2): un total mayor desborda la base (y ARCA no lo aceptaría)
+    if (totalAmount > MAX_VOUCHER_AMOUNT) {
+      throw new ValidationError(
+        `El importe total del comprobante ($${totalAmount.toFixed(2)}) supera el máximo admitido ($${MAX_VOUCHER_AMOUNT.toFixed(2)})`
+      );
     }
 
     return {

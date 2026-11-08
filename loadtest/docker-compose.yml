@@ -1,0 +1,68 @@
+# ==============================================================================
+# Entorno aislado de pruebas de carga: API compilada (imagen de producción) + PostgreSQL
+# ARCA (WSAA/WSFEv1) se reemplaza por un simulador en proceso (loadtest/harness/start.mjs):
+# nunca se contacta a los servidores reales de ARCA.
+#
+#   docker compose -f loadtest/docker-compose.yml -p arca-loadtest up -d --build
+#   docker compose -f loadtest/docker-compose.yml -p arca-loadtest down -v
+# ==============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: arca_loadtest
+      POSTGRES_USER: arca
+      POSTGRES_PASSWORD: loadtest-only-password
+    ports:
+      - "127.0.0.1:55433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arca -d arca_loadtest"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: arca-api:loadtest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["node", "/harness/start.mjs"]
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://arca:loadtest-only-password@postgres:5432/arca_loadtest
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-20}
+      DATABASE_LOCK_MAX_CONNECTIONS: ${DATABASE_LOCK_MAX_CONNECTIONS:-10}
+      FISCAL_LOCK_TIMEOUT_MS: ${FISCAL_LOCK_TIMEOUT_MS:-30000}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+      API_KEY_MASTER: loadtest-master-key-0123456789abcdef0123456789abcdef
+      ENCRYPTION_KEY: 9f1c2b7e4d5a6c3b8e0f1a2d3c4b5a6978e1f0d2c3b4a5968778695a4b3c2d1e
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      DOCS_ENABLED: ${DOCS_ENABLED:-true}
+      # Simulador ARCA
+      ARCA_MOCK_LATENCY_MIN_MS: ${ARCA_MOCK_LATENCY_MIN_MS:-150}
+      ARCA_MOCK_LATENCY_MAX_MS: ${ARCA_MOCK_LATENCY_MAX_MS:-450}
+      ARCA_MOCK_LOST_RESPONSE_RATE: ${ARCA_MOCK_LOST_RESPONSE_RATE:-0}
+    volumes:
+      - ./harness:/harness:ro
+      - ./results:/out
+    ports:
+      - "127.0.0.1:3410:3000"
+      - "127.0.0.1:3419:9999"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G

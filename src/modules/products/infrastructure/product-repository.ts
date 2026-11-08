@@ -1,4 +1,4 @@
-import { eq, and, or, ilike } from 'drizzle-orm';
+import { eq, and, or, ilike, inArray } from 'drizzle-orm';
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import { products, type Product, type NewProduct } from '../../../infrastructure/database/schema/products.js';
 
@@ -29,6 +29,17 @@ export class ProductRepository {
       .limit(1);
 
     return found ?? null;
+  }
+
+  /** Ids (de los recibidos) que existen en el catálogo del comercio */
+  public async findExistingIds(tenantId: string, ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const db = getDatabase();
+    const rows = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.tenantId, tenantId), inArray(products.id, ids)));
+    return rows.map((r) => r.id);
   }
 
   public async findByInternalCode(tenantId: string, code: string): Promise<Product | null> {

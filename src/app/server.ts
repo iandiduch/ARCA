@@ -47,6 +47,23 @@ export function parseCorsOrigin(pattern: string): string | RegExp {
 }
 
 /**
+ * Opciones de @fastify/cors a partir de CORS_ORIGIN:
+ * - "none": la API no emite cabeceras CORS, así que ningún navegador puede leer sus respuestas desde otro sitio.
+ *   Es lo indicado cuando sólo la llaman servidores (backend del POS, integraciones) y nunca un navegador.
+ * - "*": cualquier origen, sin credenciales.
+ * - lista separada por coma de orígenes exactos o con comodín de subdominio (https://*.midominio.com).
+ */
+export function corsOptions(corsOrigin: string) {
+  const value = corsOrigin.trim();
+  const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+  if (value.toLowerCase() === 'none') return { origin: false, methods };
+  // La API se autentica por cabecera (x-api-key / Bearer), no por cookies: nunca se habilitan credenciales
+  // con un origen comodín, que permitiría a cualquier sitio leer respuestas con la sesión del navegador.
+  if (value === '*') return { origin: '*', credentials: false, methods };
+  return { origin: value.split(',').filter((o) => o.trim()).map(parseCorsOrigin), credentials: true, methods };
+}
+
+/**
  * TRUST_PROXY: "false" (default), "true", un número de saltos (p. ej. "1") o una lista de IPs/CIDR separadas por coma.
  */
 export function parseTrustProxy(value: string): boolean | number | string {
@@ -84,23 +101,41 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
     return errorHandler(error as Error, request, reply);
   });
 
+  // M7: Rechazar bytes nulos (\u0000 / %00) en URL, queries y body que Postgres rechaza con 22021
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.url.includes('%00') || request.url.includes('\u0000')) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'BAD_REQUEST',
+        code: 'INVALID_INPUT',
+        message: 'La URL o parámetros de la petición contienen caracteres nulos no permitidos.'
+      });
+    }
+  });
+
+  app.addHook('preValidation', async (request, reply) => {
+    if (request.body && typeof request.body === 'object') {
+      try {
+        const bodyStr = JSON.stringify(request.body);
+        if (bodyStr.includes('\\u0000') || bodyStr.includes('\u0000')) {
+          return reply.status(400).send({
+            statusCode: 400,
+            error: 'BAD_REQUEST',
+            code: 'INVALID_INPUT',
+            message: 'El cuerpo de la petición contiene caracteres nulos no permitidos.'
+          });
+        }
+      } catch {
+        // noop
+      }
+    }
+  });
+
   // Seguridad y cabeceras
   await app.register(helmet, {
     contentSecurityPolicy: config.NODE_ENV === 'production'
   });
-  // Configuración de CORS con restricción de orígenes y soporte de wildcards (*.midominio.com)
-  const allowedOrigins = config.CORS_ORIGIN === '*'
-    ? true
-    : config.CORS_ORIGIN.split(',').map(parseCorsOrigin);
-
-  // La API se autentica por cabecera (x-api-key / Bearer), no por cookies: nunca se habilitan credenciales
-  // con un origen comodín, que permitiría a cualquier sitio leer respuestas con la sesión del navegador.
-  const wildcardCors = config.CORS_ORIGIN === '*';
-  await app.register(cors, {
-    origin: wildcardCors ? '*' : allowedOrigins,
-    credentials: !wildcardCors,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-  });
+  await app.register(cors, corsOptions(config.CORS_ORIGIN));
 
   // Limitador de peticiones por inquilino / IP
   await app.register(rateLimit, {
@@ -188,17 +223,12 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   await app.register(reportRoutes);
   await app.register(taxpayerRoutes);
 
-  // Ruta raíz informativa
+  // Ruta raíz informativa segura (L8: no expone rutas internas ni entorno sin autenticación)
   app.get('/', async (_req, reply) => {
     return reply.send({
       name: 'ARCA Fiscal API',
-      version: '0.1.0',
-      environment: config.ARCA_DEFAULT_ENVIRONMENT,
-      documentation: docsEnabled ? '/documentation' : undefined,
-      health: {
-        liveness: '/health/live',
-        readiness: '/health/ready'
-      }
+      status: 'ok',
+      version: '0.1.0'
     });
   });
 

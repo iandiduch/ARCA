@@ -112,13 +112,14 @@ cp .env.example .env
 | `HOST` | String | `0.0.0.0` | Dirección de enlace de red (`0.0.0.0` para Docker/VPS). |
 | `NODE_ENV` | String | `development` | Entorno de ejecución: `development`, `test` o `production`. |
 | `LOG_LEVEL` | String | `info` | Nivel de logs de Pino: `fatal`, `error`, `warn`, `info`, `debug`. |
-| `CORS_ORIGIN` | String | `*` | Orígenes autorizados separados por coma (ej: `https://pos.midominio.com`). Con `*` no se habilitan credenciales. |
+| `CORS_ORIGIN` | String | `*` | Qué sitios web pueden llamar a la API **desde el navegador**. `none`: ninguno (recomendado si sólo la llaman servidores, p. ej. el backend del POS). Lista separada por coma para POS web: `https://pos.comercio1.com,https://*.midominio.com`. `*`: cualquiera, sin credenciales (sólo desarrollo). |
 | `DATABASE_URL` | URL | - | Cadena de conexión PostgreSQL (`postgres://user:pass@host:5432/db`). |
 | `DATABASE_MAX_CONNECTIONS` | Número | `10` | Conexiones máximas simultáneas en el pool de PostgreSQL. |
 | `DATABASE_STATEMENT_TIMEOUT_MS`| Número | `10000` | Límite máximo de espera para consultas SQL (10s por defecto). |
 | `API_KEY_MASTER` | String | - | **Clave Maestra de Plataforma**. En producción debe ser un secreto criptográfico de al menos 32 caracteres para crear comercios (Tenants). |
 | `ENCRYPTION_KEY` | Hex (64) | - | Clave de 32 bytes (64 caracteres hex) para cifrado en reposo con **AES-256-GCM** de las claves privadas. Generar con: `openssl rand -hex 32`. |
 | `ARCA_DEFAULT_ENVIRONMENT` | Enum | `homologation` | **Ambiente fiscal predeterminado**: `homologation` (servidores de prueba de AFIP sin valor legal) o `production` (emisión real con validez fiscal ante ARCA). |
+| `ALLOW_ARCA_PRODUCTION` | Enum | *(según `NODE_ENV`)* | Habilita operar contra **ARCA producción**. Sin definir, sólo se permite con `NODE_ENV=production`. Un staging que corre la misma imagen (que fija `NODE_ENV=production`) debe usar `false`: así nunca pide credenciales WSAA de producción ni emite facturas reales, aunque su base sea una copia de producción. |
 | `ARCA_PLATFORM_CUIT` | String (11) | `20000000001` | **CUIT emisor de la plataforma o comercio raíz** (11 dígitos numéricos sin guiones, ej. `20111111112`). En homologación se usa el CUIT con el que se solicitó el acceso en WSASS; en producción, el CUIT del contribuyente titular. |
 | `RATE_LIMIT_MAX` | Número | `300` | Peticiones máximas permitidas por ventana de tiempo. |
 | `RATE_LIMIT_WINDOW_MS` | Número | `60000` | Ventana de tiempo del limitador de tasa en milisegundos (1 minuto). |
@@ -169,6 +170,53 @@ docker compose -f docker-compose.prod.yml up -d --build
 3. En la pestaña **Domains**: selecciona el servicio `api` y el puerto interno `3000`.
 4. En la pestaña **Environment**: configura tus credenciales de producción (`API_KEY_MASTER`, `ENCRYPTION_KEY`, `ARCA_DEFAULT_ENVIRONMENT=production`, `ARCA_PLATFORM_CUIT=tu_cuit`).
 5. Presiona **Deploy**. El contenedor ejecutará automáticamente las migraciones de base de datos al iniciar.
+
+### Capacidad de una réplica
+
+Medido con los recursos de `docker-compose.prod.yml` (API 2 vCPU / 1 GB, PostgreSQL 1 vCPU / 1 GB) y ARCA simulado.
+Detalle, metodología y cómo repetirlo en [loadtest/README.md](loadtest/README.md).
+
+| Tráfico | Rápido y sin errores hasta |
+|---|---|
+| Lecturas (listados, detalle, búsquedas) | ~400 req/s (p95 53 ms) |
+| Mezcla realista (75 % lecturas, 15 % emisiones, 10 % reportes) | ~200 req/s ≈ 15 facturas/s ≈ 54.000 facturas/hora |
+| Emisión por comercio | 3 a 10 facturas/s con ARCA real (máx. 5 en curso por comercio; el resto recibe 429 con `Retry-After`) |
+
+Saturada al doble de esa carga, la API no se cae ni se reinicia, no duplica numeración y se recupera sola al bajar el
+tráfico. Para la mayoría de las instalaciones **una réplica alcanza**; si se queda corta, lo primero es darle más CPU a
+PostgreSQL (es el primer cuello de botella) y después sumar réplicas.
+
+### Escalar a varias réplicas
+
+La API se puede correr en varias réplicas detrás de un balanceador (Traefik en Dokploy) sin cambios de código: los locks
+que garantizan la numeración correlativa, la idempotencia y la caché de tickets de WSAA viven en PostgreSQL, y la
+conciliación automática de pendientes toma el mismo lock, así que es seguro que corra en todas las réplicas a la vez.
+
+1. En `docker-compose.prod.yml`, quitar `container_name: arca_api_prod` del servicio `api` (Docker no permite varias
+   réplicas con el mismo nombre de contenedor) y agregar la cantidad en `deploy`:
+   ```yaml
+   api:
+     deploy:
+       replicas: 3
+       resources:
+         limits:
+           cpus: '2.0'
+           memory: 1G
+   ```
+   Fuera de Dokploy también sirve `docker compose -f docker-compose.prod.yml up -d --scale api=3`.
+2. Apuntar los clientes al **nombre del servicio** (`api`, o el dominio que Traefik expone), no al nombre de un
+   contenedor: Docker reparte las conexiones entre las réplicas.
+3. Ajustar las conexiones a la base: cada réplica abre hasta `DATABASE_MAX_CONNECTIONS` + `DATABASE_LOCK_MAX_CONNECTIONS`
+   (20 + 10 por defecto). Con 3 réplicas son 90, cerca del límite de 100 de PostgreSQL: bajar esos valores o subir
+   `max_connections`. Y darle a PostgreSQL más CPU, porque con más réplicas pasa a ser el cuello de botella.
+
+Límites que se cuentan **por réplica** (en memoria de cada proceso), así que se multiplican por la cantidad de réplicas:
+
+- `RATE_LIMIT_MAX`: con 3 réplicas, una API key puede hacer hasta 3 × 300 peticiones por minuto.
+- `MAX_IN_FLIGHT_EMISSIONS_PER_TENANT`: con 3 réplicas, un comercio puede tener hasta 15 emisiones en curso. La
+  numeración sigue siendo correcta (el lock es de base de datos); sólo cambia cuánto puede ocupar un comercio.
+
+Si se necesitan límites exactos entre réplicas, dividir esos valores por la cantidad de réplicas.
 
 ---
 
@@ -530,8 +578,8 @@ npm run test:coverage
 ```
 
 **Resultados:**
-* 26 suites de prueba passing (`26 passed`).
-* 116 tests automáticos passing (`116 passed`).
+* 37 archivos de prueba passing (`37 passed`).
+* 231 tests automáticos passing (`231 passed`).
 
 ---
 

@@ -81,7 +81,7 @@ export const healthRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     '/health/metrics',
     {
       // Expone detalles internos (versión de Node, pool, memoria): sólo para la clave maestra
-      preHandler: [authenticate, requireMaster],
+      preValidation: [authenticate, requireMaster],
       schema: {
         description: 'Métricas operativas del servidor, pool de base de datos y memoria (requiere clave maestra)',
         tags: ['Health'],

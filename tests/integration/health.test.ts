@@ -63,7 +63,7 @@ describe('Endpoints de Diagnóstico y Salud (Health Routes)', () => {
     expect(body.runtime.nodeVersion).toBeDefined();
   });
 
-  it('GET / debe responder con metadatos del servicio y enlaces a documentación', async () => {
+  it('GET / debe responder con metadatos básicos del servicio sin filtrar rutas ni entorno', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/'
@@ -72,12 +72,10 @@ describe('Endpoints de Diagnóstico y Salud (Health Routes)', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.name).toBe('ARCA Fiscal API');
+    expect(body.status).toBe('ok');
     expect(body.version).toBe('0.1.0');
-    expect(body.documentation).toBe('/documentation');
-    expect(body.health).toEqual({
-      liveness: '/health/live',
-      readiness: '/health/ready'
-    });
+    expect(body.environment).toBeUndefined();
+    expect(body.documentation).toBeUndefined();
   });
 
   it('GET a ruta inexistente debe retornar 404 estructurado', async () => {

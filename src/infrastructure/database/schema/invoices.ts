@@ -60,7 +60,8 @@ export const invoices = pgTable(
       table.voucherNumber
     ),
     index('invoices_tenant_status_idx').on(table.tenantId, table.status),
-    index('invoices_tenant_created_at_idx').on(table.tenantId, table.createdAt)
+    index('invoices_tenant_created_at_idx').on(table.tenantId, table.createdAt),
+    index('invoices_tenant_status_created_at_idx').on(table.tenantId, table.status, table.createdAt)
   ]
 );
 

@@ -6,9 +6,9 @@ import { authenticate, requireTenant } from '../../../core/security/auth-middlew
 export const productRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const productService = new ProductService();
 
-  // Todos los endpoints de productos requieren un comercio autenticado
-  fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', requireTenant);
+  // Todos los endpoints de productos requieren un comercio autenticado (L2: preValidation antes de validación de schema)
+  fastify.addHook('preValidation', authenticate);
+  fastify.addHook('preValidation', requireTenant);
 
   // POST /api/v1/products - Crear producto
   fastify.post(
@@ -19,16 +19,16 @@ export const productRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ['Products'],
         security: [{ apiKeyAuth: [] }],
         body: Type.Object({
-          name: Type.String({ minLength: 2, description: 'Nombre o descripción del producto' }),
-          internalCode: Type.Optional(Type.String({ description: 'SKU o código interno' })),
-          barcode: Type.Optional(Type.String({ description: 'Código de barras para scanner' })),
-          description: Type.Optional(Type.String()),
+          name: Type.String({ minLength: 2, maxLength: 255, description: 'Nombre o descripción del producto' }),
+          internalCode: Type.Optional(Type.String({ maxLength: 100, description: 'SKU o código interno' })),
+          barcode: Type.Optional(Type.String({ maxLength: 100, description: 'Código de barras para scanner' })),
+          description: Type.Optional(Type.String({ maxLength: 1000 })),
           conceptType: Type.Optional(Type.Integer({ default: 1, description: '1: Productos, 2: Servicios, 3: Ambos' })),
-          unitMeasure: Type.Optional(Type.String({ default: 'UNIDAD' })),
-          costPrice: Type.Optional(Type.Number({ minimum: 0, default: 0 })),
-          salePrice: Type.Number({ minimum: 0, description: 'Precio de venta' }),
+          unitMeasure: Type.Optional(Type.String({ default: 'UNIDAD', maxLength: 50 })),
+          costPrice: Type.Optional(Type.Number({ minimum: 0, maximum: 9999999999.99, default: 0 })),
+          salePrice: Type.Number({ minimum: 0, maximum: 9999999999.99, description: 'Precio de venta' }),
           ivaRate: Type.Optional(Type.Number({ default: 21.0, description: 'Alícuota IVA (21, 10.5, 0, 27, etc.)' })),
-          metadata: Type.Optional(Type.Any())
+          metadata: Type.Optional(Type.Record(Type.String({ maxLength: 100 }), Type.Any(), { maxProperties: 50 }))
         }),
         response: {
           201: Type.Object({
@@ -201,17 +201,17 @@ export const productRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           id: Type.String({ format: 'uuid' })
         }),
         body: Type.Object({
-          name: Type.Optional(Type.String({ minLength: 2 })),
-          internalCode: Type.Optional(Type.String()),
-          barcode: Type.Optional(Type.String()),
-          description: Type.Optional(Type.String()),
+          name: Type.Optional(Type.String({ minLength: 2, maxLength: 255 })),
+          internalCode: Type.Optional(Type.String({ maxLength: 100 })),
+          barcode: Type.Optional(Type.String({ maxLength: 100 })),
+          description: Type.Optional(Type.String({ maxLength: 1000 })),
           conceptType: Type.Optional(Type.Integer()),
-          unitMeasure: Type.Optional(Type.String()),
-          costPrice: Type.Optional(Type.Number({ minimum: 0 })),
-          salePrice: Type.Optional(Type.Number({ minimum: 0 })),
+          unitMeasure: Type.Optional(Type.String({ maxLength: 50 })),
+          costPrice: Type.Optional(Type.Number({ minimum: 0, maximum: 9999999999.99 })),
+          salePrice: Type.Optional(Type.Number({ minimum: 0, maximum: 9999999999.99 })),
           ivaRate: Type.Optional(Type.Number()),
           active: Type.Optional(Type.Boolean()),
-          metadata: Type.Optional(Type.Any())
+          metadata: Type.Optional(Type.Record(Type.String({ maxLength: 100 }), Type.Any(), { maxProperties: 50 }))
         }),
         response: {
           200: Type.Object({

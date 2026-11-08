@@ -27,6 +27,10 @@ export const envSchema = z.object({
   DATABASE_LOCK_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(10),
   // Espera máxima para obtener el turno de emisión de un punto de venta antes de responder 503
   FISCAL_LOCK_TIMEOUT_MS: z.coerce.number().int().min(100).default(30000),
+  // Máximo de emisiones en vuelo simultáneas por comercio antes de responder 503/429
+  MAX_IN_FLIGHT_EMISSIONS_PER_TENANT: z.coerce.number().int().min(1).default(5),
+  // Máximo de peticiones encoladas en proceso por secuencia fiscal antes de rechazo inmediato
+  MAX_QUEUE_PER_SEQUENCE: z.coerce.number().int().min(1).default(10),
   // Swagger UI en /documentation. Por defecto deshabilitado en producción
   DOCS_ENABLED: z.enum(['true', 'false']).optional(),
   // Envío de comprobantes por email (sin SMTP_HOST, en producción el endpoint responde 503)
@@ -37,7 +41,11 @@ export const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
   // Máximo de envíos del mismo comprobante en 24 h (evita usar la API como relay de spam)
-  EMAIL_MAX_SENDS_PER_INVOICE: z.coerce.number().int().min(1).default(5)
+  EMAIL_MAX_SENDS_PER_INVOICE: z.coerce.number().int().min(1).default(5),
+  // Habilita operar contra ARCA producción (facturas reales). Sin definir: sólo si NODE_ENV=production.
+  // Un staging que corre la misma imagen (NODE_ENV=production) debe fijarlo en 'false' explícitamente.
+  // (vacío cuenta como no definido: docker compose pasa '' cuando la variable no está seteada)
+  ALLOW_ARCA_PRODUCTION: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['true', 'false']).optional())
 }).superRefine((data, ctx) => {
   if (data.SMTP_HOST && !data.SMTP_FROM && !data.SMTP_USER) {
     ctx.addIssue({
@@ -85,6 +93,12 @@ export const envSchema = z.object({
 export type AppConfig = z.infer<typeof envSchema>;
 
 let cachedConfig: AppConfig | null = null;
+
+/** Si esta instalación puede usar ARCA producción (ALLOW_ARCA_PRODUCTION, o NODE_ENV=production si no se definió) */
+export function isArcaProductionAllowed(config: AppConfig = loadConfig()): boolean {
+  if (config.ALLOW_ARCA_PRODUCTION !== undefined) return config.ALLOW_ARCA_PRODUCTION === 'true';
+  return config.NODE_ENV === 'production';
+}
 
 export function loadConfig(): AppConfig {
   if (cachedConfig) {

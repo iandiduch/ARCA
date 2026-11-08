@@ -11,7 +11,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.post(
     '/api/v1/tenants',
     {
-      preHandler: [authenticate, requireMaster],
+      preValidation: [authenticate, requireMaster],
       schema: {
         description: 'Registra un nuevo comercio (tenant) en la plataforma (Exclusivo Administrador)',
         tags: ['Tenants'],
@@ -47,7 +47,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     '/api/v1/tenants',
     {
-      preHandler: [authenticate, requireMaster],
+      preValidation: [authenticate, requireMaster],
       schema: {
         description: 'Lista todos los comercios registrados en la plataforma',
         tags: ['Tenants'],
@@ -83,7 +83,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     '/api/v1/tenants/me',
     {
-      preHandler: [authenticate, requireTenant],
+      preValidation: [authenticate, requireTenant],
       schema: {
         description: 'Obtiene los datos del comercio asociado a la API Key autenticada',
         tags: ['Tenants'],
@@ -122,7 +122,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.post(
     '/api/v1/tenants/:tenantId/api-keys',
     {
-      preHandler: [authenticate, requireKeyAdmin],
+      preValidation: [authenticate, requireKeyAdmin],
       schema: {
         description: 'Genera una nueva API Key para que un sistema POS consuma la API fiscal',
         tags: ['Tenants'],
@@ -178,7 +178,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     '/api/v1/tenants/:tenantId/api-keys',
     {
-      preHandler: [authenticate, requireKeyAdmin],
+      preValidation: [authenticate, requireKeyAdmin],
       schema: {
         description: 'Lista las API Keys del comercio (sin exponer los secretos)',
         tags: ['Tenants'],
@@ -226,7 +226,7 @@ export const tenantRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.delete(
     '/api/v1/tenants/:tenantId/api-keys/:keyId',
     {
-      preHandler: [authenticate, requireKeyAdmin],
+      preValidation: [authenticate, requireKeyAdmin],
       schema: {
         description: 'Revoca inmediatamente una API Key activa de un comercio',
         tags: ['Tenants'],

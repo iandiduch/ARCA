@@ -135,4 +135,36 @@ describe('TaxCalculator — Motor de Cálculo Fiscal para WSFEv1', () => {
       /Código de IVA 7 inválido/
     );
   });
+
+  it('7. Rechaza descuentos superiores al importe del ítem (línea negativa)', () => {
+    expect(() =>
+      TaxCalculator.calculate(
+        [
+          { description: 'Prod caro', quantity: 1, unitPrice: 100000, vatRate: 21 },
+          { description: 'Descuento oculto', quantity: 1, unitPrice: 0, discount: 99000, vatRate: 21 }
+        ],
+        6
+      )
+    ).toThrow(/El descuento \(\$99000\) no puede superar el importe del ítem/);
+
+    expect(() =>
+      TaxCalculator.calculate([{ description: 'Neg', quantity: 1, unitPrice: 10, discount: 1000 }], 6)
+    ).toThrow(/El descuento \(\$1000\) no puede superar el importe del ítem/);
+  });
+
+  it('8. Rechaza comprobantes con importe total de $0.00 o menor', () => {
+    expect(() =>
+      TaxCalculator.calculate([{ description: 'cero', quantity: 0.0001, unitPrice: 1 }], 6)
+    ).toThrow(/El importe total del comprobante debe ser mayor a cero/);
+  });
+
+  it('9. Rechaza precios unitarios negativos o descuentos negativos', () => {
+    expect(() =>
+      TaxCalculator.calculate([{ description: 'neg', quantity: 1, unitPrice: -50 }], 6)
+    ).toThrow(/precio unitario no puede ser negativo/);
+
+    expect(() =>
+      TaxCalculator.calculate([{ description: 'neg disc', quantity: 1, unitPrice: 50, discount: -10 }], 6)
+    ).toThrow(/descuento no puede ser negativo/);
+  });
 });

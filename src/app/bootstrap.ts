@@ -4,6 +4,7 @@ import { logger } from './logger.js';
 import { closeDatabaseConnection } from '../infrastructure/database/connection.js';
 import { runMigrations } from '../infrastructure/database/migrate.js';
 import { IdempotencyService } from '../core/security/idempotency-service.js';
+import { InvoiceService } from '../modules/invoices/application/invoice-service.js';
 
 async function bootstrap() {
   const config = loadConfig();
@@ -36,6 +37,17 @@ async function bootstrap() {
     purgeTimer.unref();
     void purgeIdempotency();
 
+    // M3: Conciliación periódica en segundo plano de comprobantes PENDING_RECONCILIATION
+    const reconcilePending = () =>
+      new InvoiceService()
+        .reconcileAllPending()
+        .then((res) => {
+          if (res.reconciled > 0) logger.info(res, 'Comprobantes pendientes conciliados automáticamente en segundo plano');
+        })
+        .catch((err: unknown) => logger.warn({ err }, 'Error en proceso de conciliación periódica'));
+    const reconcileTimer = setInterval(() => void reconcilePending(), 2 * 60 * 1000);
+    reconcileTimer.unref();
+
     // Manejo de apagado elegante (graceful shutdown)
     let shuttingDown = false;
     const gracefulShutdown = async (reason: string, exitCode: number) => {
@@ -43,6 +55,7 @@ async function bootstrap() {
       shuttingDown = true;
       logger.info(`${reason}. Cerrando conexiones con gracia...`);
       clearInterval(purgeTimer);
+      clearInterval(reconcileTimer);
 
       // Si algo queda colgado (p. ej. una llamada a ARCA en curso), no bloquear el reinicio del contenedor
       const forceExit = setTimeout(() => {

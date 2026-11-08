@@ -92,6 +92,17 @@ export function getDatabasePoolStats(): { total: number; idle: number; waiting: 
   };
 }
 
+export function getLockPoolStats(): { total: number; idle: number; waiting: number } {
+  if (!lockPool) {
+    return { total: 0, idle: 0, waiting: 0 };
+  }
+  return {
+    total: lockPool.totalCount,
+    idle: lockPool.idleCount,
+    waiting: lockPool.waitingCount
+  };
+}
+
 export async function closeDatabaseConnection(): Promise<void> {
   if (lockPool) {
     await lockPool.end();

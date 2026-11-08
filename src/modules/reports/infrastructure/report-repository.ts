@@ -132,24 +132,37 @@ export class ReportRepository {
       .where(and(...conditions))
       .orderBy(asc(invoices.pointOfSaleNumber), asc(invoices.voucherNumber));
 
-    const results = [];
-    for (const inv of invoiceRows) {
-      const vats = await db
-        .select({
-          vatAfipCode: invoiceVatSubtotals.vatAfipCode,
-          vatRate: invoiceVatSubtotals.vatRate,
-          baseAmount: invoiceVatSubtotals.baseAmount,
-          vatAmount: invoiceVatSubtotals.vatAmount
-        })
-        .from(invoiceVatSubtotals)
-        .where(eq(invoiceVatSubtotals.invoiceId, inv.id));
+    if (invoiceRows.length === 0) return [];
 
-      results.push({
-        ...inv,
-        vatBreakdown: vats
+    // Una sola consulta con JOIN y los mismos filtros: un IN con todos los ids supera el límite de 65.535
+    // parámetros de Postgres en comercios con muchos comprobantes por período
+    const allVats = await db
+      .select({
+        invoiceId: invoiceVatSubtotals.invoiceId,
+        vatAfipCode: invoiceVatSubtotals.vatAfipCode,
+        vatRate: invoiceVatSubtotals.vatRate,
+        baseAmount: invoiceVatSubtotals.baseAmount,
+        vatAmount: invoiceVatSubtotals.vatAmount
+      })
+      .from(invoiceVatSubtotals)
+      .innerJoin(invoices, eq(invoiceVatSubtotals.invoiceId, invoices.id))
+      .where(and(...conditions));
+
+    const vatMap = new Map<string, Array<{ vatAfipCode: number; vatRate: string; baseAmount: string; vatAmount: string }>>();
+    for (const v of allVats) {
+      const arr = vatMap.get(v.invoiceId) ?? [];
+      arr.push({
+        vatAfipCode: v.vatAfipCode,
+        vatRate: v.vatRate,
+        baseAmount: v.baseAmount,
+        vatAmount: v.vatAmount
       });
+      vatMap.set(v.invoiceId, arr);
     }
 
-    return results;
+    return invoiceRows.map((inv) => ({
+      ...inv,
+      vatBreakdown: vatMap.get(inv.id) ?? []
+    }));
   }
 }

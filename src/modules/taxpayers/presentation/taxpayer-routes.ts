@@ -6,8 +6,8 @@ import { authenticate, requireTenant } from '../../../core/security/auth-middlew
 export const taxpayerRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   const taxpayerService = new TaxpayerService();
 
-  fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', requireTenant);
+  fastify.addHook('preValidation', authenticate);
+  fastify.addHook('preValidation', requireTenant);
 
   // GET /api/v1/taxpayers/:cuit - Consulta oficial de CUIT en Padrón ARCA
   fastify.get(

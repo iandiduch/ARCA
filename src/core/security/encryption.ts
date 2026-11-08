@@ -34,7 +34,10 @@ export class EncryptionService {
     const key = this.getKey();
     const iv = Buffer.from(payload.iv, 'hex');
     const authTag = Buffer.from(payload.authTag, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    if (authTag.length !== 16) {
+      throw new Error('El authTag de autenticación AES-GCM debe tener exactamente 16 bytes');
+    }
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
 
     decipher.setAuthTag(authTag);
 

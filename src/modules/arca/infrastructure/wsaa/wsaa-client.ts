@@ -7,6 +7,7 @@ import { CmsSigner } from './cms-signer.js';
 import { FiscalError, InfrastructureError } from '../../../../core/errors/app-error.js';
 import { logger } from '../../../../app/logger.js';
 import { withAdvisoryLock } from '../../../../core/security/advisory-lock.js';
+import { isArcaProductionAllowed } from '../../../../app/config.js';
 
 export interface WsaaCredentials {
   token: string;
@@ -46,6 +47,14 @@ export class WsaaClient {
     const environment = options?.environment ?? 'homologation';
     const service = options?.service ?? 'wsfe';
     const cacheKey = `${fiscalIdentityId}:${service}:${environment}`;
+
+    // Toda llamada autenticada a ARCA pasa por acá: una instalación no habilitada (staging restaurado desde un
+    // backup de producción, notebook de desarrollo) nunca obtiene credenciales de producción ni emite facturas reales.
+    if (environment === 'production' && !isArcaProductionAllowed()) {
+      throw new FiscalError(
+        'Esta instalación no está habilitada para operar contra ARCA producción (ALLOW_ARCA_PRODUCTION). No se solicitaron credenciales.'
+      );
+    }
 
     // 1. Revisar caché en base de datos
     const cached = await this.findCachedTicket(fiscalIdentityId, service, environment);

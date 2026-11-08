@@ -439,6 +439,8 @@ export class Wsfev1Client {
     impIVA?: number;
     docTipo?: number;
     docNro?: string;
+    /** Fecha y hora en que ARCA procesó el comprobante (yyyymmddhhmmss, hora argentina) */
+    fchProceso?: string | undefined;
     observaciones: Array<{ code: number; message: string }>;
     errores: Array<{ code: number; message: string }>;
   }> {
@@ -518,6 +520,7 @@ export class Wsfev1Client {
       impIVA: Number(get.ImpIVA ?? 0),
       docTipo: Number(get.DocTipo ?? 0),
       docNro: String(get.DocNro ?? ''),
+      fchProceso: get.FchProceso !== undefined ? String(get.FchProceso) : undefined,
       observaciones,
       errores
     };

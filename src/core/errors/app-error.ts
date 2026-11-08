@@ -61,3 +61,15 @@ export class InfrastructureError extends AppError {
     super(message, 502, code, details);
   }
 }
+
+export class TenantConcurrencyLimitError extends AppError {
+  public readonly retryAfter: number;
+
+  constructor(
+    message = 'El comercio ha alcanzado el límite de emisiones concurrentes permitidas. Reintente en unos segundos.',
+    retryAfterSeconds = 2
+  ) {
+    super(message, 429, 'RATE_LIMIT_EXCEEDED', { retryAfter: retryAfterSeconds });
+    this.retryAfter = retryAfterSeconds;
+  }
+}
