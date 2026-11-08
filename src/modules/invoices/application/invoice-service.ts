@@ -234,7 +234,8 @@ export class InvoiceService {
 
       // Si existe un comprobante previo con esta misma clave, verificar correspondencia estricta de payload
       const existing = await this.invoiceRepo.findLatestByIdempotencyKey(tenantId, input.idempotencyKey);
-      if (existing) {
+      // Una venta REJECTED/CANCELLED no se facturó y su clave ya fue liberada: el POS puede reenviarla corregida
+      if (existing && existing.status !== 'REJECTED' && existing.status !== 'CANCELLED') {
         // A. Verificar requestHash en la tabla de claves de idempotencia si está registrado
         const db = getDatabase();
         const [existingKeyRecord] = await db
