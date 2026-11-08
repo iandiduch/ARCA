@@ -43,7 +43,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       API_KEY_MASTER: ${API_KEY_MASTER:?Defina API_KEY_MASTER (openssl rand -hex 32)}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Defina ENCRYPTION_KEY (openssl rand -hex 32)}
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      # CORS restringido a los orígenes autorizados del POS (evitar '*' en producción)
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://pos.tucomercio.com}
       ARCA_DEFAULT_ENVIRONMENT: ${ARCA_DEFAULT_ENVIRONMENT:-production}
       ARCA_PLATFORM_CUIT: ${ARCA_PLATFORM_CUIT}
       TRUST_PROXY: ${TRUST_PROXY:-1}
