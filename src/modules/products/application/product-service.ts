@@ -38,6 +38,15 @@ export interface ImportCsvResult {
   errors: Array<{ line: number; error: string }>;
 }
 
+function sanitizeCsvCell(val: string | null | undefined): string {
+  if (!val) return '""';
+  let str = String(val);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
 export class ProductService {
   constructor(private readonly productRepo = new ProductRepository()) {}
 
@@ -212,14 +221,14 @@ export class ProductService {
 
     for (const p of list) {
       const row = [
-        `"${p.internalCode || ''}"`,
-        `"${p.barcode || ''}"`,
-        `"${p.name.replace(/"/g, '""')}"`,
-        `"${(p.description || '').replace(/"/g, '""')}"`,
+        sanitizeCsvCell(p.internalCode),
+        sanitizeCsvCell(p.barcode),
+        sanitizeCsvCell(p.name),
+        sanitizeCsvCell(p.description),
         p.costPrice,
         p.salePrice,
         p.ivaRate,
-        p.unitMeasure,
+        sanitizeCsvCell(p.unitMeasure),
         p.active ? '1' : '0'
       ];
       lines.push(row.join(','));
