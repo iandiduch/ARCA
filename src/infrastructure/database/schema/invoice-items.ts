@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, numeric, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, index, uuid, text, numeric, integer, timestamp } from 'drizzle-orm/pg-core';
 import { invoices } from './invoices.js';
 import { products } from './products.js';
 
@@ -19,7 +19,10 @@ export const invoiceItems = pgTable('invoice_items', {
   vatSubtotal: numeric('vat_subtotal', { precision: 14, scale: 2 }).notNull(),
   totalSubtotal: numeric('total_subtotal', { precision: 14, scale: 2 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
-});
+},
+  // Toda lectura de un comprobante busca sus filas por invoice_id: sin índice es un seq scan de la tabla entera
+  (table) => [index('invoice_items_invoice_id_idx').on(table.invoiceId)]
+);
 
 export type InvoiceItem = typeof invoiceItems.$inferSelect;
 export type NewInvoiceItem = typeof invoiceItems.$inferInsert;
