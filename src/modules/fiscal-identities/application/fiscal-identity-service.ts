@@ -6,7 +6,7 @@ import { Wsfev1Client } from '../../arca/infrastructure/wsfev1/wsfev1-client.js'
 import { cleanDocumentNumber, isValidCuit } from '../../../core/fiscal/cuit-validator.js';
 import { ValidationError, ConflictError, NotFoundError } from '../../../core/errors/app-error.js';
 import { AuditService } from '../../audit/application/audit-service.js';
-import { loadConfig } from '../../../app/config.js';
+import { isArcaProductionAllowed } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
 import type { FiscalIdentity } from '../../../infrastructure/database/schema/fiscal-identities.js';
 
@@ -40,6 +40,12 @@ export class FiscalIdentityService {
 
     const environment = input.environment ?? 'homologation';
     const connectionType = input.connectionType ?? 'OWN_CERTIFICATE';
+
+    if (environment === 'production' && !isArcaProductionAllowed()) {
+      throw new ValidationError(
+        'Esta instalación no está habilitada para ARCA producción (ALLOW_ARCA_PRODUCTION=false, o NODE_ENV distinto de production sin ALLOW_ARCA_PRODUCTION=true)'
+      );
+    }
 
     // La emisión siempre firma con el certificado propio de la identidad: la delegación del servicio
     // al CUIT de la plataforma (certificado de plataforma + Cuit representado) no está implementada.

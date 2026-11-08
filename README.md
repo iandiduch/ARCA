@@ -119,6 +119,7 @@ cp .env.example .env
 | `API_KEY_MASTER` | String | - | **Clave Maestra de Plataforma**. En producción debe ser un secreto criptográfico de al menos 32 caracteres para crear comercios (Tenants). |
 | `ENCRYPTION_KEY` | Hex (64) | - | Clave de 32 bytes (64 caracteres hex) para cifrado en reposo con **AES-256-GCM** de las claves privadas. Generar con: `openssl rand -hex 32`. |
 | `ARCA_DEFAULT_ENVIRONMENT` | Enum | `homologation` | **Ambiente fiscal predeterminado**: `homologation` (servidores de prueba de AFIP sin valor legal) o `production` (emisión real con validez fiscal ante ARCA). |
+| `ALLOW_ARCA_PRODUCTION` | Enum | *(según `NODE_ENV`)* | Habilita operar contra **ARCA producción**. Sin definir, sólo se permite con `NODE_ENV=production`. Un staging que corre la misma imagen (que fija `NODE_ENV=production`) debe usar `false`: así nunca pide credenciales WSAA de producción ni emite facturas reales, aunque su base sea una copia de producción. |
 | `ARCA_PLATFORM_CUIT` | String (11) | `20000000001` | **CUIT emisor de la plataforma o comercio raíz** (11 dígitos numéricos sin guiones, ej. `20111111112`). En homologación se usa el CUIT con el que se solicitó el acceso en WSASS; en producción, el CUIT del contribuyente titular. |
 | `RATE_LIMIT_MAX` | Número | `300` | Peticiones máximas permitidas por ventana de tiempo. |
 | `RATE_LIMIT_WINDOW_MS` | Número | `60000` | Ventana de tiempo del limitador de tasa en milisegundos (1 minuto). |
