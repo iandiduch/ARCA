@@ -5,6 +5,7 @@ import { invoices, type Invoice } from '../../../infrastructure/database/schema/
 import { InvoiceRepository, type FullInvoice, type InvoiceListFilters } from '../infrastructure/invoice-repository.js';
 import { FiscalIdentityRepository } from '../../fiscal-identities/infrastructure/fiscal-identity-repository.js';
 import { CustomerRepository } from '../../customers/infrastructure/customer-repository.js';
+import { ProductRepository } from '../../products/infrastructure/product-repository.js';
 import { TaxCalculator, type InvoiceItemInput } from '../domain/tax-calculator.js';
 import { FiscalQrGenerator } from '../domain/qr-generator.js';
 import { WsaaClient } from '../../arca/infrastructure/wsaa/wsaa-client.js';
@@ -104,6 +105,7 @@ export class InvoiceService {
   private invoiceRepo = new InvoiceRepository();
   private fiscalRepo = new FiscalIdentityRepository();
   private customerRepo = new CustomerRepository();
+  private productRepo = new ProductRepository();
 
   /**
    * Crea un comprobante en estado borrador (DRAFT) sin consultar ARCA ni asignar numeración oficial
@@ -129,6 +131,7 @@ export class InvoiceService {
 
     this.validateFiscalRules(input);
     await this.assertCustomerBelongsToTenant(tenantId, input.customerId);
+    await this.assertProductsBelongToTenant(tenantId, input.items);
 
     const voucherLetter = getVoucherLetter(input.voucherType);
     const pricesIncludeVat = input.pricesIncludeVat !== false;
@@ -304,6 +307,7 @@ export class InvoiceService {
       // 3. Validaciones fiscales y de comprobantes asociados ANTES de adquirir bloqueos
       this.validateFiscalRules(input);
       await this.assertCustomerBelongsToTenant(tenantId, input.customerId);
+      await this.assertProductsBelongToTenant(tenantId, input.items);
       const { identity } = await this.loadIdentityAndCertificate(tenantId, input.fiscalIdentityId);
 
       const ptos = await this.fiscalRepo.getPointsOfSale(identity.id);
@@ -1175,6 +1179,19 @@ export class InvoiceService {
   private async assertCustomerBelongsToTenant(tenantId: string, customerId: string | undefined): Promise<void> {
     if (customerId && !(await this.customerRepo.findById(tenantId, customerId))) {
       throw new NotFoundError(`Cliente con ID "${customerId}" no encontrado`);
+    }
+  }
+
+  // M6: Validar que los ítems con productId pertenezcan al comercio que emite
+  private async assertProductsBelongToTenant(tenantId: string, items: InvoiceItemInput[]): Promise<void> {
+    const productIds = [...new Set(items.map((it) => it.productId).filter((id): id is string => Boolean(id)))];
+    if (productIds.length === 0) return;
+
+    // Una sola consulta (hasta 500 ítems): no una por producto
+    const found = new Set(await this.productRepo.findExistingIds(tenantId, productIds));
+    const missing = productIds.find((id) => !found.has(id));
+    if (missing) {
+      throw new NotFoundError(`Producto con ID "${missing}" no encontrado para este comercio`);
     }
   }
 
