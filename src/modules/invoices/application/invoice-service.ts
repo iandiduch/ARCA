@@ -219,6 +219,14 @@ export class InvoiceService {
     userId?: string,
     userRole?: string
   ): Promise<FullInvoice> {
+    // M8: Si no se envió idempotencyKey pero sí posSaleId, deduplicar la FACTURA de esa venta con una clave implícita.
+    // Sólo facturas (una NC/ND de devolución suele llevar el posSaleId de la venta original) y acotada a la API key,
+    // identidad y PtoVta: varios POS del mismo comercio pueden generar posSaleId que se repiten entre sí.
+    const posSaleId = input.posSaleId?.trim();
+    if (!input.idempotencyKey && posSaleId && isInvoice(input.voucherType)) {
+      input.idempotencyKey = `pos-sale:${userId ?? '-'}:${input.fiscalIdentityId}:${input.pointOfSaleNumber}:${posSaleId}`;
+    }
+
     // 1. Control estricto de Idempotencia si el cliente envió idempotencyKey
     if (input.idempotencyKey) {
       const requestHash = IdempotencyService.hashPayload(this.fingerprint(input));
