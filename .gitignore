@@ -18,3 +18,4 @@ backups/
 SRS.md
 docs/
 scripts/get-condicion-iva.ts
+audit/
