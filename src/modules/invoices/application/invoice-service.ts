@@ -35,7 +35,8 @@ import {
   ConflictError,
   FiscalError,
   InfrastructureError,
-  ForbiddenError
+  ForbiddenError,
+  TenantConcurrencyLimitError
 } from '../../../core/errors/app-error.js';
 import { LockTimeoutError, withAdvisoryLocks } from '../../../core/security/advisory-lock.js';
 import { TenantInFlightLimiter } from '../../../core/security/tenant-in-flight.js';
@@ -306,7 +307,8 @@ export class InvoiceService {
       if (input.idempotencyKey) {
         await IdempotencyService.release(tenantId, input.idempotencyKey).catch(() => {});
       }
-      throw new LockTimeoutError(
+      // R7: Responder 429 con Retry-After en lugar de 503 cuando se saturan las emisiones del comercio
+      throw new TenantConcurrencyLimitError(
         'El comercio ha alcanzado el límite de emisiones concurrentes permitidas. Reintente en unos segundos.',
         2
       );

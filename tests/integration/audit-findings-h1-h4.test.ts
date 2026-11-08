@@ -588,7 +588,7 @@ describe('Auditoría — Resolución de Hallazgos H1, H2, H3 y H4', () => {
       expect(victimResponse.json().status).toBe('AUTHORIZED');
 
       const attackerResults = await Promise.all(attackerPromises);
-      const busyErrors = attackerResults.filter((r) => r.statusCode === 503);
+      const busyErrors = attackerResults.filter((r) => r.statusCode === 429 || r.statusCode === 503);
       const successes = attackerResults.filter((r) => r.statusCode === 201);
 
       // Se aplicó el límite de emisiones concurrentes con Retry-After
@@ -727,7 +727,7 @@ describe('Auditoría — Resolución de Hallazgos H1, H2, H3 y H4', () => {
         payload
       });
 
-      expect(resBlocked.statusCode).toBe(503);
+      expect(resBlocked.statusCode).toBe(429);
       expect(resBlocked.headers['retry-after']).toBeDefined();
 
       // 2. Liberar el limiter (terminaron las emisiones concurrentes)
