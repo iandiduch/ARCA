@@ -36,7 +36,7 @@ describe('Membrete por punto de venta y datos fiscales obligatorios', () => {
       name: `Key ${name}`,
       keyHash: keyGen.keyHash,
       prefix: keyGen.prefix,
-      role: 'ADMIN'
+      role: 'admin'
     });
     return { tenantId: tenant!.id, rawKey: keyGen.rawKey };
   }
@@ -276,7 +276,16 @@ describe('Membrete por punto de venta y datos fiscales obligatorios', () => {
   });
 
   it('re-sincronizar los PV con ARCA conserva el membrete por número', async () => {
-    // Antes: PV 6 con membrete, PV 7 sin membrete (se limpió en el test anterior)
+    // Autocontenido: no depende del membrete que hayan dejado los tests anteriores
+    await repo.updatePointOfSaleMembrete(identityAId, 6, {
+      fantasyName: 'Ferretería',
+      commercialAddress: 'Av. San Martín 1234, Taco Pozo'
+    });
+    await repo.updatePointOfSaleMembrete(identityAId, 7, {
+      fantasyName: null,
+      commercialAddress: null
+    });
+
     const synced = await repo.syncPointsOfSale(identityAId, [
       { fiscalIdentityId: identityAId, number: 6, type: 'ELECTRONICA', active: true },
       { fiscalIdentityId: identityAId, number: 7, type: 'ELECTRONICA', active: true },
