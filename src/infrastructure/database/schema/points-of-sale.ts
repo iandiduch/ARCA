@@ -11,6 +11,9 @@ export const pointsOfSale = pgTable(
     number: integer('number').notNull(), // ej: 1, 2, ... 99999
     type: text('type').default('ELECTRONIC').notNull(), // 'ELECTRONIC', 'MANUAL', 'FISCAL_CONTROLLER'
     description: text('description'),
+    // Membrete propio de la sucursal: null = se usan los de la identidad fiscal
+    fantasyName: text('fantasy_name'),
+    commercialAddress: text('commercial_address'),
     active: boolean('active').default(true).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
   },

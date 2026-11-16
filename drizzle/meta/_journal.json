@@ -85,6 +85,13 @@
       "when": 1794173617986,
       "tag": "0011_invoice_children_invoice_id_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794847690606,
+      "tag": "0012_points_of_sale_membrete",
+      "breakpoints": true
     }
   ]
 }

@@ -4,11 +4,17 @@ import { EncryptionService } from '../../../core/security/encryption.js';
 import { WsaaClient } from '../../arca/infrastructure/wsaa/wsaa-client.js';
 import { Wsfev1Client } from '../../arca/infrastructure/wsfev1/wsfev1-client.js';
 import { cleanDocumentNumber, isValidCuit } from '../../../core/fiscal/cuit-validator.js';
+import {
+  normalizeIssuerTaxCondition,
+  normalizeGrossIncomeNumber,
+  normalizeActivityStartDate
+} from '../../../core/fiscal/tax-condition.js';
 import { ValidationError, ConflictError, NotFoundError } from '../../../core/errors/app-error.js';
 import { AuditService } from '../../audit/application/audit-service.js';
 import { isArcaProductionAllowed } from '../../../app/config.js';
 import { logger } from '../../../app/logger.js';
 import type { FiscalIdentity } from '../../../infrastructure/database/schema/fiscal-identities.js';
+import type { PointOfSale } from '../../../infrastructure/database/schema/points-of-sale.js';
 
 export interface CreateIdentityInput {
   cuit: string;
@@ -72,9 +78,9 @@ export class FiscalIdentityService {
       fantasyName: input.fantasyName?.trim() || null,
       commercialAddress: input.commercialAddress?.trim() || null,
       environment,
-      taxCondition: input.taxCondition ?? 'RESPONSABLE_MONOTRIBUTO',
-      grossIncomeNumber: input.grossIncomeNumber?.trim() || null,
-      activityStartDate: input.activityStartDate || null,
+      taxCondition: normalizeIssuerTaxCondition(input.taxCondition?.trim() || 'RESPONSABLE_MONOTRIBUTO'),
+      grossIncomeNumber: input.grossIncomeNumber?.trim() ? normalizeGrossIncomeNumber(input.grossIncomeNumber) : null,
+      activityStartDate: input.activityStartDate?.trim() ? normalizeActivityStartDate(input.activityStartDate) : null,
       connectionType,
       status: initialStatus,
       statusReason
@@ -116,9 +122,15 @@ export class FiscalIdentityService {
     if (input.businessName !== undefined) data.businessName = input.businessName.trim();
     if (input.fantasyName !== undefined) data.fantasyName = input.fantasyName.trim();
     if (input.commercialAddress !== undefined) data.commercialAddress = input.commercialAddress.trim();
-    if (input.grossIncomeNumber !== undefined) data.grossIncomeNumber = input.grossIncomeNumber.trim();
-    if (input.activityStartDate !== undefined) data.activityStartDate = input.activityStartDate.trim();
-    if (input.taxCondition !== undefined && input.taxCondition.trim()) data.taxCondition = input.taxCondition.trim();
+    if (input.grossIncomeNumber !== undefined) {
+      data.grossIncomeNumber = input.grossIncomeNumber.trim() ? normalizeGrossIncomeNumber(input.grossIncomeNumber) : null;
+    }
+    if (input.activityStartDate !== undefined) {
+      data.activityStartDate = input.activityStartDate.trim() ? normalizeActivityStartDate(input.activityStartDate) : null;
+    }
+    if (input.taxCondition !== undefined && input.taxCondition.trim()) {
+      data.taxCondition = normalizeIssuerTaxCondition(input.taxCondition);
+    }
 
     const updated = await this.repo.update(tenantId, identityId, data);
     if (!updated) {
@@ -440,6 +452,9 @@ export class FiscalIdentityService {
       businessName: identity.businessName,
       fantasyName: identity.fantasyName,
       commercialAddress: identity.commercialAddress,
+      taxCondition: identity.taxCondition,
+      grossIncomeNumber: identity.grossIncomeNumber,
+      activityStartDate: identity.activityStartDate,
       environment: identity.environment,
       connectionType: identity.connectionType,
       status: identity.status,
@@ -451,8 +466,52 @@ export class FiscalIdentityService {
         id: p.id,
         number: p.number,
         type: p.type,
-        active: p.active
+        active: p.active,
+        fantasyName: p.fantasyName,
+        commercialAddress: p.commercialAddress
       }))
     };
+  }
+
+  /**
+   * Membrete propio de un punto de venta (nombre de fantasía y domicilio de esa sucursal).
+   * null o vacío = el comprobante usa los datos de la identidad fiscal.
+   */
+  public async updatePointOfSaleMembrete(
+    tenantId: string,
+    identityId: string,
+    number: number,
+    input: { fantasyName?: string | null | undefined; commercialAddress?: string | null | undefined },
+    userId?: string
+  ): Promise<PointOfSale> {
+    const identity = await this.getIdentityById(tenantId, identityId);
+
+    const data: { fantasyName?: string | null; commercialAddress?: string | null } = {};
+    if (input.fantasyName !== undefined) data.fantasyName = input.fantasyName?.trim() || null;
+    if (input.commercialAddress !== undefined) data.commercialAddress = input.commercialAddress?.trim() || null;
+
+    const existing = await this.repo.findPointOfSaleByNumber(identity.id, number);
+    if (!existing) {
+      throw new NotFoundError(
+        `El punto de venta ${number} no está registrado para el CUIT ${identity.cuit}. Pruebe la conexión con ARCA para sincronizar los puntos de venta.`
+      );
+    }
+    if (Object.keys(data).length === 0) return existing;
+
+    const updated = await this.repo.updatePointOfSaleMembrete(identity.id, number, data);
+    if (!updated) {
+      throw new NotFoundError(`El punto de venta ${number} no está registrado para el CUIT ${identity.cuit}`);
+    }
+
+    await AuditService.record({
+      tenantId,
+      userId,
+      action: 'POINT_OF_SALE_UPDATED',
+      entityType: 'point_of_sale',
+      entityId: updated.id,
+      payload: { fiscalIdentityId: identity.id, number, ...data }
+    });
+
+    return updated;
   }
 }

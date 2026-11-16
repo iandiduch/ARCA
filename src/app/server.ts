@@ -18,6 +18,7 @@ import { reportRoutes } from '../modules/reports/presentation/report-routes.js';
 import { taxpayerRoutes } from '../modules/taxpayers/presentation/taxpayer-routes.js';
 import { logger } from './logger.js';
 import { rateLimitKey } from '../core/security/rate-limit-key.js';
+import { openRequestContext, resumeRequestContext } from '../core/request-context.js';
 import { getContainer, type ServiceContainer } from './container.js';
 
 /**
@@ -99,6 +100,16 @@ export async function createApp(options?: CreateAppOptions): Promise<FastifyInst
   // Manejo global de errores
   app.setErrorHandler((error, request, reply) => {
     return errorHandler(error as Error, request, reply);
+  });
+
+  // Contexto del pedido para la auditoría (IP y API Key). Hooks con callback: `als.run` envuelve
+  // el resto del ciclo; un hook async no propagaría el contexto. Se retoma en preValidation porque
+  // el parseo del body lo pierde. Van antes que cualquier otro hook de esas fases.
+  app.addHook('onRequest', (request, _reply, done) => {
+    openRequestContext(request, { ip: request.ip }, done);
+  });
+  app.addHook('preValidation', (request, _reply, done) => {
+    resumeRequestContext(request, done);
   });
 
   // M7: Rechazar bytes nulos (\u0000 / %00) en URL, queries y body que Postgres rechaza con 22021

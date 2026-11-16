@@ -121,6 +121,7 @@ export class InvoiceService {
     if (!identity) {
       throw new NotFoundError(`Identidad fiscal con ID "${input.fiscalIdentityId}" no encontrada`);
     }
+    this.assertIssuerFiscalData(identity);
 
     const ptos = await this.fiscalRepo.getPointsOfSale(identity.id);
     const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber && p.active);
@@ -320,6 +321,7 @@ export class InvoiceService {
       await this.assertCustomerBelongsToTenant(tenantId, input.customerId);
       await this.assertProductsBelongToTenant(tenantId, input.items);
       const { identity } = await this.loadIdentityAndCertificate(tenantId, input.fiscalIdentityId);
+      this.assertIssuerFiscalData(identity);
 
       const ptos = await this.fiscalRepo.getPointsOfSale(identity.id);
       const ptoRecord = ptos.find((p) => p.number === input.pointOfSaleNumber && p.active);
@@ -1075,6 +1077,22 @@ export class InvoiceService {
     }
 
     return 'CANCELLED';
+  }
+
+  /**
+   * El comprobante debe informar Ingresos Brutos e inicio de actividades del emisor (RG 1415).
+   * En producción no se emite sin ellos; en homologación se deja probar.
+   */
+  private assertIssuerFiscalData(identity: FiscalIdentity): void {
+    if (identity.environment !== 'production') return;
+    const missing: string[] = [];
+    if (!identity.grossIncomeNumber?.trim()) missing.push('número de Ingresos Brutos');
+    if (!identity.activityStartDate?.trim()) missing.push('fecha de inicio de actividades');
+    if (missing.length > 0) {
+      throw new ValidationError(
+        `La identidad fiscal ${identity.cuit} no tiene cargado: ${missing.join(' y ')}. Cárguelos antes de facturar: el comprobante debe informarlos.`
+      );
+    }
   }
 
   private async loadIdentityAndCertificate(
