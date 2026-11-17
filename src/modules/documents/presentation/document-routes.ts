@@ -43,7 +43,8 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         throw new NotFoundError('Identidad fiscal emisora no encontrada');
       }
 
-      const pdfBuffer = await InvoicePdfService.generatePdf(invoice, identity);
+      const pointOfSale = await fiscalRepo.findPointOfSaleByNumber(identity.id, invoice.pointOfSaleNumber);
+      const pdfBuffer = await InvoicePdfService.generatePdf(invoice, identity, pointOfSale);
       const ptoVta = String(invoice.pointOfSaleNumber).padStart(5, '0');
       const nroComp = invoice.voucherNumber ? String(invoice.voucherNumber).padStart(8, '0') : 'DRAFT';
       const filename = `Comprobante_${invoice.voucherLetter}_${ptoVta}-${nroComp}.pdf`;
@@ -165,12 +166,14 @@ export const documentRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         throw new NotFoundError('Identidad fiscal emisora no encontrada');
       }
 
+      const pointOfSale = await fiscalRepo.findPointOfSaleByNumber(identity.id, invoice.pointOfSaleNumber);
       const result = await emailService.sendInvoicePdf(
         tenant.id,
         invoice,
         identity,
         request.body,
-        request.authContext?.apiKeyId
+        request.authContext?.apiKeyId,
+        pointOfSale
       );
 
       return reply.send(result);

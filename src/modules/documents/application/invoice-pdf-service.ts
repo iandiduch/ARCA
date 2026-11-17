@@ -1,16 +1,21 @@
 import PDFDocument from 'pdfkit';
 import type { FullInvoice } from '../../invoices/infrastructure/invoice-repository.js';
 import type { FiscalIdentity } from '../../../infrastructure/database/schema/fiscal-identities.js';
+import type { PointOfSale } from '../../../infrastructure/database/schema/points-of-sale.js';
 import { formatCuit } from '../../../core/fiscal/cuit-validator.js';
+import { parseIssuerTaxCondition, ISSUER_TAX_CONDITION_LABELS } from '../../../core/fiscal/tax-condition.js';
 import { QrService } from './qr-service.js';
 
 export class InvoicePdfService {
   /**
-   * Genera el documento PDF reglamentario de la factura conforme al estándar de ARCA
+   * Genera el documento PDF reglamentario de la factura conforme al estándar de ARCA.
+   * Nunca inventa datos: lo que no está cargado no se imprime. El membrete (nombre de fantasía y
+   * domicilio comercial) sale del punto de venta del comprobante y, si no tiene, de la identidad.
    */
   public static async generatePdf(
     invoice: FullInvoice,
-    identity: FiscalIdentity
+    identity: FiscalIdentity,
+    pointOfSale?: Pick<PointOfSale, 'fantasyName' | 'commercialAddress'> | null
   ): Promise<Buffer> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -74,27 +79,25 @@ export class InvoicePdfService {
         doc.moveTo(297, headerY + letterBoxHeight).lineTo(297, headerY + headerHeight).stroke('#333333');
 
         // Columna Izquierda: Emisor
-        const taxConditionLabels: Record<string, string> = {
-          RESPONSABLE_INSCRIPTO: 'IVA Responsable Inscripto',
-          RESPONSABLE_MONOTRIBUTO: 'Responsable Monotributo',
-          EXENTO: 'IVA Sujeto Exento',
-          CONSUMIDOR_FINAL: 'Consumidor Final',
-          NO_RESPONSABLE: 'No Responsable'
-        };
-        const emisorTaxCond = (identity.taxCondition && taxConditionLabels[identity.taxCondition])
-          ? taxConditionLabels[identity.taxCondition]
-          : (identity.taxCondition || 'IVA Responsable Inscripto');
+        const parsedTaxCond = parseIssuerTaxCondition(identity.taxCondition);
+        const emisorTaxCond = parsedTaxCond ? ISSUER_TAX_CONDITION_LABELS[parsedTaxCond] : identity.taxCondition?.trim();
+
+        // Membrete: el del punto de venta (sucursal) y, si no tiene, el de la identidad fiscal
+        const emisorFantasy = pointOfSale?.fantasyName?.trim() || identity.fantasyName?.trim();
+        const emisorAddress = pointOfSale?.commercialAddress?.trim() || identity.commercialAddress?.trim();
 
         // Nombre de fantasía como título destacado (con fallback a la razón social)
-        const emisorTitle = (identity.fantasyName?.trim() || identity.businessName).toUpperCase();
+        const emisorTitle = (emisorFantasy || identity.businessName).toUpperCase();
         doc.font('Helvetica-Bold').fontSize(13).fillColor('#111111');
         doc.text(emisorTitle, 40, headerY + 12, { width: 240 });
 
         doc.font('Helvetica').fontSize(8.5).fillColor('#444444');
-        doc.text(`Razón Social: ${identity.businessName}`, 40, headerY + 34, { width: 245 });
-        doc.text(`Domicilio Comercial: ${identity.commercialAddress?.trim() || '-'}`, 40, headerY + 48, { width: 245 });
-        doc.text(`Condición frente al IVA: ${emisorTaxCond}`, 40, headerY + 62, { width: 245 });
-        doc.text('Punto de Emisión: Casa Central', 40, headerY + 76, { width: 245 });
+        const emisorLines = [
+          `Razón Social: ${identity.businessName}`,
+          emisorAddress ? `Domicilio Comercial: ${emisorAddress}` : null,
+          emisorTaxCond ? `Condición frente al IVA: ${emisorTaxCond}` : null
+        ].filter((l): l is string => l !== null);
+        emisorLines.forEach((line, i) => doc.text(line, 40, headerY + 34 + i * 14, { width: 245 }));
         if (identity.environment === 'homologation') {
           doc.font('Helvetica-Oblique').fontSize(8).fillColor('#c0392b');
           doc.text('Entorno: Homologación (Sin validez fiscal)', 40, headerY + 92);
@@ -108,8 +111,13 @@ export class InvoicePdfService {
         doc.font('Helvetica').fontSize(9).fillColor('#333333');
         doc.text(`Fecha de Emisión: ${dateFormatted}`, 315, headerY + 52);
         doc.text(`CUIT: ${formatCuit(identity.cuit)}`, 315, headerY + 67);
-        doc.text(`Ingresos Brutos: ${identity.grossIncomeNumber || identity.cuit}`, 315, headerY + 82);
-        doc.text(`Inicio de Actividades: ${identity.activityStartDate || '01/01/2020'}`, 315, headerY + 97);
+        const fiscalLines = [
+          identity.grossIncomeNumber?.trim() ? `Ingresos Brutos: ${identity.grossIncomeNumber.trim()}` : null,
+          identity.activityStartDate?.trim()
+            ? `Inicio de Actividades: ${this.formatIsoDate(identity.activityStartDate.trim())}`
+            : null
+        ].filter((l): l is string => l !== null);
+        fiscalLines.forEach((line, i) => doc.text(line, 315, headerY + 82 + i * 15));
 
         // ==========================================
         // 3. PERIODO FACTURADO Y VENCIMIENTO DE PAGO
@@ -151,8 +159,10 @@ export class InvoicePdfService {
         doc.font('Helvetica-Bold').text('Condición IVA:', 40, clientY + 30);
         doc.font('Helvetica').text(this.getFiscalConditionName(invoice.customerTaxCondition), 115, clientY + 30);
 
-        doc.font('Helvetica-Bold').text('Domicilio:', 240, clientY + 30);
-        doc.font('Helvetica').text(invoice.customerAddress || 'Ciudad Autónoma de Buenos Aires', 295, clientY + 30, { width: 260 });
+        if (invoice.customerAddress?.trim()) {
+          doc.font('Helvetica-Bold').text('Domicilio:', 240, clientY + 30);
+          doc.font('Helvetica').text(invoice.customerAddress.trim(), 295, clientY + 30, { width: 260 });
+        }
 
         // ==========================================
         // 5. TABLA DE ÍTEMS Y PRODUCTOS
@@ -274,6 +284,12 @@ export class InvoicePdfService {
       default:
         return `COMPROBANTE "${voucherLetter}"`;
     }
+  }
+
+  /** 'YYYY-MM-DD' -> 'DD/MM/AAAA'; otro formato se imprime tal cual */
+  private static formatIsoDate(value: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
   }
 
   private static getFiscalConditionName(conditionCode?: number | null | undefined): string {

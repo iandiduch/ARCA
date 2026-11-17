@@ -1,6 +1,7 @@
 import { getDatabase } from '../../../infrastructure/database/connection.js';
 import { auditLogs, type NewAuditLog } from '../../../infrastructure/database/schema/audit-logs.js';
 import { logger } from '../../../app/logger.js';
+import { getRequestContext } from '../../../core/request-context.js';
 import { eq, and, gte, desc, sql } from 'drizzle-orm';
 
 export interface RecordAuditParams {
@@ -18,15 +19,17 @@ export class AuditService {
   public static async record(params: RecordAuditParams): Promise<void> {
     try {
       const db = getDatabase();
+      // IP y API Key del pedido en curso cuando el llamador no las pasa (los services no reciben el request)
+      const reqCtx = getRequestContext();
       const newLog: NewAuditLog = {
         tenantId: params.tenantId,
         userId: params.userId,
-        apiKeyId: params.apiKeyId,
+        apiKeyId: params.apiKeyId ?? reqCtx?.apiKeyId,
         action: params.action,
         entityType: params.entityType,
         entityId: params.entityId,
         payload: params.payload,
-        ipAddress: params.ipAddress
+        ipAddress: params.ipAddress ?? reqCtx?.ip
       };
 
       await db.insert(auditLogs).values(newLog);

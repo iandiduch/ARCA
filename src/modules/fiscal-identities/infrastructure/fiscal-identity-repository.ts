@@ -174,11 +174,61 @@ export class FiscalIdentityRepository {
     const db = getDatabase();
     if (ptos.length === 0) return [];
 
-    // Reemplazo atómico: si el insert falla no se pierden los puntos de venta anteriores
+    // Reemplazo atómico: si el insert falla no se pierden los puntos de venta anteriores.
+    // ARCA no informa el membrete de cada PV: se conserva el cargado por número.
     return db.transaction(async (tx) => {
+      const previous = await tx
+        .select({
+          number: pointsOfSale.number,
+          fantasyName: pointsOfSale.fantasyName,
+          commercialAddress: pointsOfSale.commercialAddress
+        })
+        .from(pointsOfSale)
+        .where(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId))
+        // Bloquea las filas: un PATCH de membrete concurrente espera y no se pierde
+        .for('update');
+      const membreteByNumber = new Map(previous.map((p) => [p.number, p]));
+
       await tx.delete(pointsOfSale).where(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId));
-      return tx.insert(pointsOfSale).values(ptos).returning();
+      return tx
+        .insert(pointsOfSale)
+        .values(
+          ptos.map((p) => {
+            const prev = membreteByNumber.get(p.number);
+            return {
+              ...p,
+              fantasyName: p.fantasyName ?? prev?.fantasyName ?? null,
+              commercialAddress: p.commercialAddress ?? prev?.commercialAddress ?? null
+            };
+          })
+        )
+        .returning();
     });
+  }
+
+  /** Punto de venta por número, activo o no (los comprobantes viejos pueden ser de un PV dado de baja). */
+  public async findPointOfSaleByNumber(fiscalIdentityId: string, number: number): Promise<PointOfSale | null> {
+    const db = getDatabase();
+    const [found] = await db
+      .select()
+      .from(pointsOfSale)
+      .where(and(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId), eq(pointsOfSale.number, number)))
+      .limit(1);
+    return found ?? null;
+  }
+
+  public async updatePointOfSaleMembrete(
+    fiscalIdentityId: string,
+    number: number,
+    data: { fantasyName?: string | null; commercialAddress?: string | null }
+  ): Promise<PointOfSale | null> {
+    const db = getDatabase();
+    const [updated] = await db
+      .update(pointsOfSale)
+      .set(data)
+      .where(and(eq(pointsOfSale.fiscalIdentityId, fiscalIdentityId), eq(pointsOfSale.number, number)))
+      .returning();
+    return updated ?? null;
   }
 
   public async getPointsOfSale(fiscalIdentityId: string): Promise<PointOfSale[]> {

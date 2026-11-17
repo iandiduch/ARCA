@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { FullInvoice } from '../../invoices/infrastructure/invoice-repository.js';
 import type { FiscalIdentity } from '../../../infrastructure/database/schema/fiscal-identities.js';
+import type { PointOfSale } from '../../../infrastructure/database/schema/points-of-sale.js';
 import { InvoicePdfService } from '../../documents/application/invoice-pdf-service.js';
 import { AuditService } from '../../audit/application/audit-service.js';
 import { logger } from '../../../app/logger.js';
@@ -45,7 +46,8 @@ export class EmailService {
     invoice: FullInvoice,
     identity: FiscalIdentity,
     options: SendInvoiceEmailOptions,
-    userId?: string
+    userId?: string,
+    pointOfSale?: Pick<PointOfSale, 'fantasyName' | 'commercialAddress'> | null
   ): Promise<EmailSendResult> {
     if (!this.transporter && this.config.NODE_ENV === 'production') {
       throw new AppError(
@@ -76,7 +78,7 @@ export class EmailService {
       );
     }
 
-    const pdfBuffer = await InvoicePdfService.generatePdf(invoice, identity);
+    const pdfBuffer = await InvoicePdfService.generatePdf(invoice, identity, pointOfSale);
     const ptoVta = String(invoice.pointOfSaleNumber).padStart(5, '0');
     const nroComp = invoice.voucherNumber ? String(invoice.voucherNumber).padStart(8, '0') : 'BORRADOR';
     const filename = `Comprobante_${invoice.voucherLetter}_${ptoVta}-${nroComp}.pdf`;

@@ -7,6 +7,7 @@ import { extractRawApiKey, rememberAuthenticatedKey } from './rate-limit-key.js'
 import { ApiKeyRepository } from '../../modules/tenants/infrastructure/api-key-repository.js';
 import { TenantRepository } from '../../modules/tenants/infrastructure/tenant-repository.js';
 import type { Tenant } from '../../infrastructure/database/schema/tenants.js';
+import { getRequestContext } from '../request-context.js';
 
 /**
  * Roles de API Key de comercio:
@@ -86,6 +87,8 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
     apiKeyId: context.apiKey.id,
     role
   };
+  const reqCtx = getRequestContext();
+  if (reqCtx) reqCtx.apiKeyId = context.apiKey.id;
 
   // Actualizar última fecha de uso en background
   void apiKeyRepo.updateLastUsed(context.apiKey.id).catch(() => {});

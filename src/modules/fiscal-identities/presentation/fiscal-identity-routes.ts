@@ -119,6 +119,9 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
               businessName: Type.String(),
               fantasyName: Type.Union([Type.String(), Type.Null()]),
               commercialAddress: Type.Union([Type.String(), Type.Null()]),
+              taxCondition: Type.String(),
+              grossIncomeNumber: Type.Union([Type.String(), Type.Null()]),
+              activityStartDate: Type.Union([Type.String(), Type.Null()]),
               environment: Type.String(),
               connectionType: Type.String(),
               status: Type.String(),
@@ -141,6 +144,9 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
           businessName: i.businessName,
           fantasyName: i.fantasyName,
           commercialAddress: i.commercialAddress,
+          taxCondition: i.taxCondition,
+          grossIncomeNumber: i.grossIncomeNumber,
+          activityStartDate: i.activityStartDate,
           environment: i.environment,
           connectionType: i.connectionType,
           status: i.status,
@@ -179,6 +185,9 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
             businessName: Type.String(),
             fantasyName: Type.Union([Type.String(), Type.Null()]),
             commercialAddress: Type.Union([Type.String(), Type.Null()]),
+            taxCondition: Type.String(),
+            grossIncomeNumber: Type.Union([Type.String(), Type.Null()]),
+            activityStartDate: Type.Union([Type.String(), Type.Null()]),
             environment: Type.String(),
             connectionType: Type.String(),
             status: Type.String(),
@@ -202,11 +211,58 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
         businessName: updated.businessName,
         fantasyName: updated.fantasyName,
         commercialAddress: updated.commercialAddress,
+        taxCondition: updated.taxCondition,
+        grossIncomeNumber: updated.grossIncomeNumber,
+        activityStartDate: updated.activityStartDate,
         environment: updated.environment,
         connectionType: updated.connectionType,
         status: updated.status,
         statusReason: updated.statusReason
       });
+    }
+  );
+
+  // PATCH /api/v1/fiscal-identities/:id/points-of-sale/:number - Membrete de un punto de venta
+  // (una misma CUIT puede tener sucursales con distinto nombre de fantasía y domicilio)
+  fastify.patch(
+    '/api/v1/fiscal-identities/:id/points-of-sale/:number',
+    {
+      preValidation: [authenticate, requireTenant],
+      schema: {
+        description:
+          'Actualiza el nombre de fantasía y el domicilio comercial que se imprimen en los comprobantes de ese punto de venta. null o vacío = usar los de la identidad fiscal.',
+        tags: ['Fiscal Identities'],
+        security: [{ apiKeyAuth: [] }],
+        params: Type.Object({
+          id: Type.String({ format: 'uuid' }),
+          number: Type.Integer({ minimum: 1, maximum: 99998 })
+        }),
+        body: Type.Object(
+          {
+            fantasyName: Type.Optional(Type.Union([Type.String({ maxLength: 120 }), Type.Null()])),
+            commercialAddress: Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()]))
+          },
+          { additionalProperties: false }
+        ),
+        response: {
+          200: Type.Object({
+            number: Type.Integer(),
+            fantasyName: Type.Union([Type.String(), Type.Null()]),
+            commercialAddress: Type.Union([Type.String(), Type.Null()])
+          })
+        }
+      }
+    },
+    async (request, reply) => {
+      const tenantId = request.tenant!.id;
+      const pv = await service.updatePointOfSaleMembrete(
+        tenantId,
+        request.params.id,
+        request.params.number,
+        request.body,
+        request.authContext?.apiKeyId
+      );
+      return reply.send({ number: pv.number, fantasyName: pv.fantasyName, commercialAddress: pv.commercialAddress });
     }
   );
 
@@ -229,6 +285,9 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
             businessName: Type.String(),
             fantasyName: Type.Union([Type.String(), Type.Null()]),
             commercialAddress: Type.Union([Type.String(), Type.Null()]),
+            taxCondition: Type.String(),
+            grossIncomeNumber: Type.Union([Type.String(), Type.Null()]),
+            activityStartDate: Type.Union([Type.String(), Type.Null()]),
             environment: Type.String(),
             connectionType: Type.String(),
             status: Type.String(),
@@ -241,7 +300,9 @@ export const fiscalIdentityRoutes: FastifyPluginAsyncTypebox = async (fastify) =
                 id: Type.String(),
                 number: Type.Integer(),
                 type: Type.String(),
-                active: Type.Boolean()
+                active: Type.Boolean(),
+                fantasyName: Type.Union([Type.String(), Type.Null()]),
+                commercialAddress: Type.Union([Type.String(), Type.Null()])
               })
             )
           })
